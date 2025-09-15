@@ -1,0 +1,15 @@
+report:
+  junit:
+    path: commala-junit.xml
+validate:
+  author:
+    email:
+      enabled: true
+    name:
+      enabled: true
+  branch:
+    enabled: true
+  message:
+    enabled: true
+  signoff:
+    enabled: true

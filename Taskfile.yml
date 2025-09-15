@@ -1,0 +1,14 @@
+version: '3'
+
+tasks:
+  fmt:
+    cmds:
+      - go fmt ./...
+  mod:
+    cmds:
+      - go mod tidy
+      - go mod vendor
+  test:
+    cmds:
+      - go clean -testcache
+      - go test -p=1 ./...
