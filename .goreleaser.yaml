@@ -1,0 +1,105 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+dockers:
+  - id: linux-amd64
+    goos: linux
+    goarch: amd64
+    ids:
+      - commala
+    image_templates:
+      - "gcr.io/aljoshare/commala:latest"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/amd64"
+  - id: linux-arm64
+    goos: linux
+    goarch: arm64
+    ids:
+      - commala
+    image_templates:
+      - "gcr.io/aljoshare/commala:latest"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/arm64"
+  - id: darwin-arm64
+    goos: darwin
+    goarch: arm64
+    ids:
+      - commala
+    image_templates:
+      - "gcr.io/aljoshare/commala:latest"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=darwin/arm64"
+  - id: windows-amd64
+    goos: windows
+    goarch: amd64
+    ids:
+      - commala
+    image_templates:
+      - "gcr.io/aljoshare/commala:latest"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=windows/amd64"
+
+release:
+  footer: >-
+    ---
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
