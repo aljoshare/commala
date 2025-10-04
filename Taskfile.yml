@@ -3,7 +3,7 @@ version: "3"
 tasks:
   setup:
     cmds:
-      - npm install --save-dev --save-exact prettier release-please
+      - npm install --save-dev --save-exact prettier release-please @goreleaser/goreleaser
   fmt:
     cmds:
       - npx prettier --write .
@@ -16,3 +16,6 @@ tasks:
     cmds:
       - go clean -testcache
       - go test -p=1 ./...
+  build:
+    cmds:
+      - go build -o commala
