@@ -3,7 +3,7 @@ version: "3"
 tasks:
   setup:
     cmds:
-      - npm install --save-dev --save-exact prettier release-please @goreleaser/goreleaser
+      - npm install
   fmt:
     cmds:
       - npx prettier --write .
