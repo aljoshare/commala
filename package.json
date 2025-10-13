@@ -1,0 +1,7 @@
+{
+  "devDependencies": {
+    "@goreleaser/goreleaser": "2.12.5",
+    "prettier": "3.6.2",
+    "release-please": "17.1.2"
+  }
+}

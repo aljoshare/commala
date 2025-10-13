@@ -36,10 +36,9 @@ dockers:
     ids:
       - commala
     image_templates:
-      - "gcr.io/aljoshare/commala:latest"
-      - "gcr.io/aljoshare/commala:{{ .Tag }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -53,10 +52,9 @@ dockers:
     ids:
       - commala
     image_templates:
-      - "gcr.io/aljoshare/commala:latest"
-      - "gcr.io/aljoshare/commala:{{ .Tag }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+      - "gcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
+      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -64,41 +62,19 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
-  - id: darwin-arm64
-    goos: darwin
-    goarch: arm64
-    ids:
-      - commala
+docker_manifests:
+  - name_template: "gcr.io/aljoshare/commala:{{ .Tag }}"
     image_templates:
-      - "gcr.io/aljoshare/commala:latest"
-      - "gcr.io/aljoshare/commala:{{ .Tag }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--platform=darwin/arm64"
-  - id: windows-amd64
-    goos: windows
-    goarch: amd64
-    ids:
-      - commala
+      - gcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
+      - gcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
+  - name_template: "gcr.io/aljoshare/commala:v{{ .Major }}"
     image_templates:
-      - "gcr.io/aljoshare/commala:latest"
-      - "gcr.io/aljoshare/commala:{{ .Tag }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--platform=windows/amd64"
-
+      - gcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
+      - gcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
+  - name_template: "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
+      - gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
 release:
   footer: >-
     ---
