@@ -1,0 +1,28 @@
+name: lint
+on:
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  prettier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+      - run: npm install
+      - run: npx prettier --check .
+  go-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go fmt ./...
