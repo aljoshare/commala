@@ -34,8 +34,6 @@ go.work.sum
 commala.log
 commala
 commala-junit.xml
-package-lock.json
-package.json
 node_modules
 # Added by goreleaser init:
 dist/
