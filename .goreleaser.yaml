@@ -36,9 +36,9 @@ dockers:
     ids:
       - commala
     image_templates:
-      - "gcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -52,9 +52,9 @@ dockers:
     ids:
       - commala
     image_templates:
-      - "gcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
-      - "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -63,18 +63,18 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--platform=linux/arm64"
 docker_manifests:
-  - name_template: "gcr.io/aljoshare/commala:{{ .Tag }}"
+  - name_template: "ghcr.io/aljoshare/commala:{{ .Tag }}"
     image_templates:
-      - gcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
-      - gcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
-  - name_template: "gcr.io/aljoshare/commala:v{{ .Major }}"
+      - ghcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
+      - ghcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
+  - name_template: "ghcr.io/aljoshare/commala:v{{ .Major }}"
     image_templates:
-      - gcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
-      - gcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
-  - name_template: "gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
+      - ghcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
+      - ghcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
+  - name_template: "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
     image_templates:
-      - gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
-      - gcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
+      - ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
+      - ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
 release:
   footer: >-
     ---
