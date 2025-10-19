@@ -4,7 +4,8 @@ on:
     tags:
       - "*"
 permissions:
-  contents: write
+  contents: read
+  packages: write
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
