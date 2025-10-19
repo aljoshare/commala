@@ -5,7 +5,7 @@
 ![GitHub Release](https://img.shields.io/github/v/release/aljoshare/commala?style=flat&logo=github&label=release&color=eca13d)
 ![GitHub Release Date](https://img.shields.io/github/release-date/aljoshare/commala?display_date=published_at&style=flat&logo=github&label=release%20date&color=eca13d)
 
-![Static Badge](https://img.shields.io/badge/language-grey?logo=rust)
+![Static Badge](https://img.shields.io/badge/language-grey?logo=go)
 ![Static Badge](https://img.shields.io/badge/platform-linux-eca13d?logo=docker)
 ![Static Badge](https://img.shields.io/badge/arch-amd64-eca13d?logo=docker)
 ![Static Badge](https://img.shields.io/badge/arch-arm64-eca13d?logo=docker)
