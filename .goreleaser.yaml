@@ -65,16 +65,16 @@ dockers:
 docker_manifests:
   - name_template: "ghcr.io/aljoshare/commala:{{ .Tag }}"
     image_templates:
-      - ghcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
-      - ghcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:{{ .Tag }}-linux-arm64"
   - name_template: "ghcr.io/aljoshare/commala:v{{ .Major }}"
     image_templates:
-      - ghcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
-      - ghcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}-linux-arm64"
   - name_template: "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}"
     image_templates:
-      - ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
-      - ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-amd64"
+      - "ghcr.io/aljoshare/commala:v{{ .Major }}.{{ .Minor }}-linux-arm64"
 release:
   footer: >-
     ---
