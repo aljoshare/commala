@@ -9,6 +9,7 @@
 ![Static Badge](https://img.shields.io/badge/platform-linux-eca13d?logo=docker)
 ![Static Badge](https://img.shields.io/badge/arch-amd64-eca13d?logo=docker)
 ![Static Badge](https://img.shields.io/badge/arch-arm64-eca13d?logo=docker)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/aljoshare/commala/badge)](https://scorecard.dev/viewer/?uri=github.com/aljoshare/commala)
 
 > “Go then, there are other commits than these.”  
 > — commala, probably
