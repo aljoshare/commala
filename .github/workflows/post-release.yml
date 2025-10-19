@@ -2,9 +2,9 @@ name: post-release
 on:
   push:
     tags:
-      - "*"
+      - "v*.*.*"
 permissions:
-  contents: read
+  contents: write
   packages: write
 jobs:
   goreleaser:
