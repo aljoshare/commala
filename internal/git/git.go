@@ -202,6 +202,17 @@ func (r RealGit) GetLatestCommit() (string, error) {
 func (r RealGit) ParseCommitRange(commitrange string) (*CommitRange, error) {
 	cr := CommitRange{}
 	var err error
+	if strings.Compare(commitrange, "..") == 0 {
+		cr.From, err = r.GetInitialCommit()
+		if err != nil {
+			return nil, fmt.Errorf("can't find initial commit")
+		}
+		cr.To, err = r.GetLatestCommit()
+		if err != nil {
+			return nil, fmt.Errorf("can't find latest commit")
+		}
+		return &cr, nil
+	}
 	if strings.HasPrefix(commitrange, "..") || !strings.Contains(commitrange, "..") {
 		cr.From, err = r.GetInitialCommit()
 		if err != nil {
