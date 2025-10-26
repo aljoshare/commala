@@ -14,7 +14,7 @@
 > “Go then, there are other commits than these.”  
 > — commala, probably
 
-commala is a commit linting tool that ensures that certain standards are met before you merge to keep your git history clean and consistent. Inspired by the The Dark Tower, commala is part of your Ka-tet, when you walk through the Wastelands of software development.
+commala is a commit linting tool that ensures that certain standards are met before you merge to keep your git history clean and consistent. commala is part of your Ka-tet, when you walk through the Wastelands of software development.
 
 ## Getting started
 
