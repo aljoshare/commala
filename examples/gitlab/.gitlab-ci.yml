@@ -1,0 +1,18 @@
+stages:
+  - lint
+
+commit-lint:
+  stage: lint
+  image: ghcr.io/aljoshare/commala:vX.Y.Z # Replace vX.Y.Z with the desired version
+  script:
+    - commala check $CI_COMMIT_BEFORE_SHA..$CI_COMMIT_SHA
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - when: never
+  artifacts:
+    when: always
+    paths:
+      - commala-junit.xml
+    reports:
+      junit: commala-junit.xml
