@@ -50,6 +50,12 @@ The commala command is pretty easy. You can run the checks on all commits like t
 commala check
 ```
 
+If you want to check all commits, just pass two dots:
+
+```shell
+commala check ..
+```
+
 If you want to specify the commit to start and check until HEAD, just specify the commit hash followed by two dots:
 
 ```shell
