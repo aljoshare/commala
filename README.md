@@ -16,6 +16,8 @@
 
 commala is a commit linting tool that ensures that certain standards are met before you merge to keep your git history clean and consistent. commala is part of your Ka-tet, when you walk through the Wastelands of software development.
 
+![Example of a commala workflow](assets/commala.gif)
+
 ## Getting started
 
 If you want to use it on Github, try out the Github Action. For Gitlab CI/CD, you can copy this example and modify it to your needs.
