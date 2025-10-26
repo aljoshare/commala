@@ -44,7 +44,7 @@ func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
 func (b BranchValidator) isConventional() (bool, error) {
 	var s []bool
 	s = make([]bool, 0, 5)
-	matched, err := regexp.Match(`^(feature|bugfix|hotfix|release|chore|docs|test|refactor)/[a-zA-Z0-9._-]+$`, []byte(b.branchName))
+	matched, err := regexp.Match(`^(feature|feat|bugfix|fix|hotfix|release|chore|docs|test|refactor)/[a-zA-Z0-9._-]+$`, []byte(b.branchName))
 	if err != nil {
 		return false, fmt.Errorf("can't match branch name")
 	}
