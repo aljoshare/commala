@@ -18,6 +18,14 @@ commala is a commit linting tool that ensures that certain standards are met bef
 
 ![Example of a commala workflow](assets/commala.gif)
 
+## Validators
+
+- Author Name: Check if the name of the author is set
+- Author Email: Check if the email address of the author is set
+- Branch: Check if the branch follows the [conventional branch specification](https://conventional-branch.github.io/)
+- Message: Check if the commit message follows the [conventional commit specification](https://www.conventionalcommits.org)
+- Sign-off: Check if the commit is signed off
+
 ## Getting started
 
 If you want to use it on Github, try out the [Github Action](https://github.com/aljoshare/commala-action). For Gitlab CI/CD, you can copy [this example](examples/gitlab/.gitlab-ci.yml) and modify it to your needs.
