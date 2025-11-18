@@ -177,16 +177,18 @@ func (r RealGit) GetInitialCommit() (string, error) {
 		return "", fmt.Errorf("can't get git log")
 	}
 
-	var initialCommit *object.Commit
-	for {
-		commit, err := commitIter.Next()
-		if err != nil {
-			break
-		}
-		initialCommit = commit
-		log.Debugf("No initial commit defined! Starting with %s", initialCommit)
+	var initialCommit string
+	commitIter.ForEach(func(c *object.Commit) error {
+		initialCommit = c.Hash.String()
+		return nil
+	})
+	if initialCommit == "" {
+		log.Errorf("Can't find initial commit")
+		return "", fmt.Errorf("can't find initial commit")
+	} else {
+		log.Warnf("No initial commit defined! Starting with %s", initialCommit)
+		return initialCommit, nil
 	}
-	return initialCommit.Hash.String(), nil
 }
 
 func (r RealGit) GetLatestCommit() (string, error) {
