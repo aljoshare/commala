@@ -205,18 +205,18 @@ func (r RealGit) ParseCommitRange(commitrange string) (*CommitRange, error) {
 	cr := CommitRange{}
 	var err error
 	if strings.Compare(commitrange, "..") == 0 {
-		cr.From, err = r.GetInitialCommit()
+		cr.To, err = r.GetInitialCommit()
 		if err != nil {
 			return nil, fmt.Errorf("can't find initial commit")
 		}
-		cr.To, err = r.GetLatestCommit()
+		cr.From, err = r.GetLatestCommit()
 		if err != nil {
 			return nil, fmt.Errorf("can't find latest commit")
 		}
 		return &cr, nil
 	}
 	if strings.HasPrefix(commitrange, "..") || !strings.Contains(commitrange, "..") {
-		cr.From, err = r.GetInitialCommit()
+		cr.To, err = r.GetInitialCommit()
 		if err != nil {
 			return nil, fmt.Errorf("can't find initial commit")
 		}
@@ -224,15 +224,15 @@ func (r RealGit) ParseCommitRange(commitrange string) (*CommitRange, error) {
 		return &cr, nil
 	}
 	if strings.HasSuffix(commitrange, "..") {
-		cr.From = strings.Replace(commitrange, "..", "", 1)
-		cr.To, err = r.GetLatestCommit()
+		cr.From, err = r.GetLatestCommit()
+		cr.To = strings.Replace(commitrange, "..", "", 1)
 		if err != nil {
 			return nil, fmt.Errorf("can't find latest commit")
 		}
 		return &cr, nil
 	}
 	s := strings.Split(commitrange, "..")
-	cr.From = s[0]
-	cr.To = s[1]
+	cr.To = s[0]
+	cr.From = s[1]
 	return &cr, nil
 }
