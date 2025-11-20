@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v6"
@@ -235,4 +236,50 @@ func (r RealGit) ParseCommitRange(commitrange string) (*CommitRange, error) {
 	cr.To = s[0]
 	cr.From = s[1]
 	return &cr, nil
+}
+
+func (r RealGit) ParseNegativeIndex(commitrange string) (*CommitRange, error) {
+	cr := CommitRange{}
+	if strings.HasPrefix(commitrange, "HEAD~") {
+		negindex := strings.Replace(commitrange, "HEAD~", "", 1)
+		n, err := strconv.Atoi(negindex)
+		if err != nil {
+			return nil, fmt.Errorf("can't parse negative index %s", negindex)
+		}
+		head, err := r.getHead()
+		if err != nil {
+			return nil, fmt.Errorf("can't get git head")
+		}
+		fromCommit := head.Hash()
+		repo, err := r.getRepo()
+		if err != nil {
+			return nil, err
+		}
+		commitIter, err := repo.Log(&gogit.LogOptions{From: fromCommit, Order: gogit.LogOrderCommitterTime})
+		if err != nil {
+			return nil, fmt.Errorf("can't get git log")
+		}
+		i := 0
+		var toCommit *object.Commit
+		err = commitIter.ForEach(func(commit *object.Commit) error {
+			if i == n {
+				toCommit = commit
+				return fmt.Errorf("stop iteration")
+			}
+			i++
+			return nil
+		})
+		if err != nil && err.Error() != "stop iteration" {
+			return nil, fmt.Errorf("can't iterate git log")
+		}
+		if toCommit == nil {
+			return nil, fmt.Errorf("can't find commit at negative index %d", n)
+		}
+		cr.From = fromCommit.String()
+		cr.To = toCommit.Hash.String()
+		log.Debugf("Parsed negative index %s to commit range %s..%s", commitrange, cr.From, cr.To)
+		return &cr, nil
+	} else {
+		return nil, fmt.Errorf("can't parse negative index from %s", commitrange)
+	}
 }

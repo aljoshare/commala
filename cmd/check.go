@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/aljoshare/commala/internal/cli"
 	"github.com/aljoshare/commala/internal/config"
 	"github.com/aljoshare/commala/internal/git"
@@ -40,7 +43,16 @@ var queryCmd = &cobra.Command{
 		c := config.Config{}
 		c.ReadConfig()
 		g := git.RealGit{}
-		cr, err := g.ParseCommitRange(args[0])
+		var cr *git.CommitRange
+		var err error
+		if isCommitRange(args[0]) {
+			cr, err = g.ParseCommitRange(args[0])
+		} else if isNegativeIndex(args[0]) {
+			cr, err = g.ParseNegativeIndex(args[0])
+		} else {
+			cli.ErrorHandling(fmt.Errorf("argument must be a commit range or a negative index"))
+			return
+		}
 		if err != nil {
 			cli.ErrorHandling(err)
 			return
@@ -53,4 +65,12 @@ var queryCmd = &cobra.Command{
 		cli.PrintResultTable(result)
 		report.NewJUnitReport(result, c.ReportJunitPath)
 	},
+}
+
+func isCommitRange(arg string) bool {
+	return strings.Contains(arg, "..")
+}
+
+func isNegativeIndex(arg string) bool {
+	return strings.HasPrefix(arg, "HEAD~")
 }
