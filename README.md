@@ -84,6 +84,12 @@ If you want to specify a commit range, just specify two commit hashes with two d
 commala check f725bf88adb76df5c8c576b514def199e20fc6a0..a1b2c3d4e5f67890abcdef1234567890abcdef12
 ```
 
+If you want to specify a negative index, just use the swung dash notation:
+
+```shell
+commala check HEAD~3
+```
+
 ### Result
 
 To make it easy to use commala as part of a CI/CD job, it will output the result on the command line but also writes the result in JUnit XML format, so that it can be picked up by the source code versioning system of your choice. If one of the checks fails, commala will exit with a non-zero status.
