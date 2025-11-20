@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/aljoshare/commala/compare/v0.2.0...v0.3.0) (2025-11-20)
+
+
+### Features
+
+* support negative index as argument ([#34](https://github.com/aljoshare/commala/issues/34)) ([c52b0c3](https://github.com/aljoshare/commala/commit/c52b0c3ffb9cc40750d1099abcc815ed4259b87a))
+
+
+### Bug Fixes
+
+* **deps:** bump golang.org/x/crypto from 0.41.0 to 0.45.0 ([#33](https://github.com/aljoshare/commala/issues/33)) ([646d90d](https://github.com/aljoshare/commala/commit/646d90deac9c704453011664d53f3d4662b20a18))
+* **git:** change from/to to match go-git order ([#31](https://github.com/aljoshare/commala/issues/31)) ([57fbe7a](https://github.com/aljoshare/commala/commit/57fbe7ac96ba1d4bcd3f8e017c62b17f6ace6ae9))
+* **git:** improve error handling if initial commit can't be found ([#30](https://github.com/aljoshare/commala/issues/30)) ([e7758df](https://github.com/aljoshare/commala/commit/e7758df1e8d8049b286ad47b349e5b2786b4f686))
+
 ## [0.2.0](https://github.com/aljoshare/commala/compare/v0.1.0...v0.2.0) (2025-10-26)
 
 
