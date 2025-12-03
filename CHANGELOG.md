@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/aljoshare/commala/compare/v0.3.0...v0.4.0) (2025-12-03)
+
+
+### Features
+
+* add failure description to junit report ([#38](https://github.com/aljoshare/commala/issues/38)) ([8e86038](https://github.com/aljoshare/commala/commit/8e86038fa5fffe7257735aafa740b8ff2344932d))
+
 ## [0.3.0](https://github.com/aljoshare/commala/compare/v0.2.0...v0.3.0) (2025-11-20)
 
 
