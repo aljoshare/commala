@@ -1,6 +1,6 @@
 package utils
 
-func AllTrueSlice(s []bool) bool {
+func AllTrue(s map[string]bool) bool {
 	for _, v := range s {
 		if !v {
 			return false
@@ -9,18 +9,9 @@ func AllTrueSlice(s []bool) bool {
 	return true
 }
 
-func AllFalseSlice(s []bool) bool {
+func AllFalse(s map[string]bool) bool {
 	for _, v := range s {
 		if v {
-			return false
-		}
-	}
-	return true
-}
-
-func AllTrueMap(m map[string]bool) bool {
-	for _, v := range m {
-		if !v {
 			return false
 		}
 	}

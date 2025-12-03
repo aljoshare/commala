@@ -11,7 +11,7 @@ import (
 )
 
 type MessageValidator struct {
-	messages []string
+	messages map[string]string
 }
 
 func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git) (*ValidationResult, error) {
@@ -31,30 +31,33 @@ func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git) (*ValidationR
 	if err != nil {
 		return nil, err
 	}
-	if utils.AllTrueSlice(vs) {
+	if utils.AllTrue(vs) {
 		vr.Valid = true
-		vr.Message = append(vr.Message, "All commit messages are conventional\n")
+		vr.Summary = "All commit messages are conventional\n"
 		return &vr, nil
+	} else {
+		vr.Valid = false
+		vr.Summary = "Not all commit messages are conventional\n"
 	}
-	for _, v := range vs {
-		if !v {
-			for i, m := range m.messages {
-				if !vs[i] {
-					vr.Message = append(vr.Message, fmt.Sprintf("Commit Message: \"%s\" is not conventional\n", m))
-				}
-			}
+	vr.Messages = make(map[string]ResultMessage, len(m.messages))
+	for i := range m.messages {
+		vr.Assertions++
+		if !vs[i] {
+			vr.Messages[i] = ResultMessage{false, fmt.Sprintf("Commit Message: \"%s\" is not conventional\n", i)}
+			vr.Failures++
+		} else {
+			vr.Messages[i] = ResultMessage{true, fmt.Sprintf("Commit Message: \"%s\" is conventional\n", i)}
 		}
 	}
 	return &vr, nil
 }
 
-func (m MessageValidator) isConventional() ([]bool, error) {
-	var l []bool
-	l = make([]bool, 0, len(m.messages))
+func (m MessageValidator) isConventional() (map[string]bool, error) {
+	var l = make(map[string]bool, len(m.messages))
 	re := regexp.MustCompile(`^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\([\w\-\.]+\))?(!)?: ([\w ])+([\s\S]*)`)
-	for _, cm := range m.messages {
+	for i, cm := range m.messages {
 		matched := re.Match([]byte(cm))
-		l = append(l, matched)
+		l[i] = matched
 	}
 	return l, nil
 }
