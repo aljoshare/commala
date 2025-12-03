@@ -9,26 +9,28 @@ import (
 
 func TestMessageIsConventional(t *testing.T) {
 	m := MessageValidator{}
-	m.messages = append(m.messages, "feat(scope): add new feature")
+	m.messages = make(map[string]string)
+	m.messages["commit3"] = "feat(scope): add new feature"
 	valid, err := m.isConventional()
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if !utils.AllTrueSlice(valid) {
+	if !utils.AllTrue(valid) {
 		t.Errorf("Expected messages to be conventional, got %v", valid)
 	}
 }
 
 func TestMessageIsNotConventional(t *testing.T) {
 	m := MessageValidator{}
-	m.messages = append(m.messages, "test")
-	m.messages = append(m.messages, "not: valid")
-	m.messages = append(m.messages, "feat(): scope not valid")
+	m.messages = make(map[string]string)
+	m.messages["commit4"] = "test"
+	m.messages["commit5"] = "not: valid"
+	m.messages["commit6"] = "feat(): scope not valid"
 	valid, err := m.isConventional()
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if !utils.AllFalseSlice(valid) {
+	if !utils.AllFalse(valid) {
 		t.Errorf("Expected messages to be not conventional, got %v", valid)
 	}
 }

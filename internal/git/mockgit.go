@@ -10,12 +10,11 @@ func (m MockGit) GetBranchName() (string, error) {
 	return "feature/mock-branch", nil
 }
 
-func (m MockGit) GetCommitMessages(from string, to string) ([]string, error) {
-	var l []string
-	l = make([]string, 0, 5)
-	l = append(l, "feat: add new feature\nSigned-off-by: Johen Doe <john@doe.com>")
-	l = append(l, "fix: fix a bug\nSigned-off-by: Johen Doe <john@doe.com>")
-	return l, nil
+func (m MockGit) GetCommitMessages(from string, to string) (map[string]string, error) {
+	var messageMap = make(map[string]string)
+	messageMap["commit1"] = "feat: add new feature\nSigned-off-by: Johen Doe <john@doe.com>"
+	messageMap["commit2"] = "fix: fix a bug\nSigned-off-by: Johen Doe <john@doe.com>"
+	return messageMap, nil
 }
 
 func (m MockGit) GetCommitAuthorNames(from string, to string) (map[string]string, error) {
