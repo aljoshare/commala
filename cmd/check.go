@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/aljoshare/commala/internal/cli"
@@ -51,19 +52,24 @@ var queryCmd = &cobra.Command{
 			cr, err = g.ParseNegativeIndex(args[0])
 		} else {
 			cli.ErrorHandling(fmt.Errorf("argument must be a commit range or a negative index"))
-			return
+			os.Exit(1)
 		}
 		if err != nil {
 			cli.ErrorHandling(err)
-			return
+			os.Exit(1)
 		}
 		result, err := validator.Validate(cr, g, c)
 		if err != nil {
 			cli.ErrorHandling(err)
-			return
+			os.Exit(1)
 		}
 		cli.PrintResultTable(result)
 		report.NewJUnitReport(result, c.ReportJunitPath)
+		for _, r := range result {
+			if !r.Valid {
+				os.Exit(1)
+			}
+		}
 	},
 }
 
