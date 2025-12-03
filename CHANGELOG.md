@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/aljoshare/commala/compare/v0.4.0...v0.4.1) (2025-12-03)
+
+
+### Bug Fixes
+
+* **cmd:** exit with one if error or failure ([#40](https://github.com/aljoshare/commala/issues/40)) ([2c0b337](https://github.com/aljoshare/commala/commit/2c0b3376352d1b3341b2710b699c9552a00043c0))
+
 ## [0.4.0](https://github.com/aljoshare/commala/compare/v0.3.0...v0.4.0) (2025-12-03)
 
 
