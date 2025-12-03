@@ -18,7 +18,7 @@ type CommitRange struct {
 
 type Git interface {
 	GetBranchName() (string, error)
-	GetCommitMessages(from string, to string) ([]string, error)
+	GetCommitMessages(from string, to string) (map[string]string, error)
 	GetCommitAuthorNames(from string, to string) (map[string]string, error)
 	GetCommitAuthorEmails(from string, to string) (map[string]string, error)
 	GetCommitHash(hash string) (*object.Commit, error)
@@ -58,9 +58,8 @@ func (r RealGit) GetBranchName() (string, error) {
 	return bn, nil
 }
 
-func (r RealGit) GetCommitMessages(from string, to string) ([]string, error) {
-	var l []string
-	l = make([]string, 0, 5)
+func (r RealGit) GetCommitMessages(from string, to string) (map[string]string, error) {
+	var m = make(map[string]string)
 	repo, err := r.getRepo()
 	if err != nil {
 		return nil, err
@@ -82,13 +81,13 @@ func (r RealGit) GetCommitMessages(from string, to string) ([]string, error) {
 	}
 
 	err = commitIter.ForEach(func(commit *object.Commit) error {
-		l = append(l, commit.Message)
+		m[commit.Hash.String()] = commit.Message
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("can't iterate git log")
 	}
-	return l, nil
+	return m, nil
 }
 
 func (r RealGit) GetCommitAuthorNames(from string, to string) (map[string]string, error) {

@@ -16,7 +16,9 @@ type AuthorEmailValidator struct {
 func (m AuthorEmailValidator) Validate(cr *git.CommitRange, g git.Git) (*ValidationResult, error) {
 	log.Debugf("Validating if commits has author emails from %s to %s", cr.From, cr.To)
 	vr := ValidationResult{
-		Validator: "Author Email",
+		Validator:  "Author Email",
+		Assertions: 0,
+		Failures:   0,
 	}
 	defer func() {
 		vr.Duration = utils.Duration(time.Now())
@@ -30,25 +32,28 @@ func (m AuthorEmailValidator) Validate(cr *git.CommitRange, g git.Git) (*Validat
 	if err != nil {
 		return nil, err
 	}
-	if utils.AllTrueMap(vm) {
+	if utils.AllTrue(vm) {
 		vr.Valid = true
-		vr.Message = append(vr.Message, "All commit messages have author email set\n")
-		return &vr, nil
+		vr.Summary = "All commit messages have author email set\n"
+	} else {
+		vr.Valid = true
+		vr.Summary = "Not all commit messages have author email set\n"
 	}
-	for _, v := range vm {
-		if !v {
-			for i, m := range m.authorEmails {
-				if !vm[i] {
-					vr.Message = append(vr.Message, fmt.Sprintf("Commit Message: \"%s\" has no author email\n", m))
-				}
-			}
+	vr.Messages = make(map[string]ResultMessage, len(m.authorEmails))
+	for i := range m.authorEmails {
+		vr.Assertions++
+		if !vm[i] {
+			vr.Messages[i] = ResultMessage{false, fmt.Sprintf("Commit Message: \"%s\" has no author email\n", i)}
+			vr.Failures++
+		} else {
+			vr.Messages[i] = ResultMessage{true, fmt.Sprintf("Commit Message: \"%s\" has author email\n", i)}
 		}
 	}
 	return &vr, nil
 }
 
 func (m AuthorEmailValidator) hasAuthorEmail() (map[string]bool, error) {
-	am := make(map[string]bool)
+	am := make(map[string]bool, len(m.authorEmails))
 	for ch, an := range m.authorEmails {
 		if an != "" {
 			am[ch] = true

@@ -30,25 +30,28 @@ func (m AuthorNameValidator) Validate(cr *git.CommitRange, g git.Git) (*Validati
 	if err != nil {
 		return nil, err
 	}
-	if utils.AllTrueMap(vm) {
+	if utils.AllTrue(vm) {
 		vr.Valid = true
-		vr.Message = append(vr.Message, "All commit messages have author names\n")
-		return &vr, nil
+		vr.Summary = "All commit messages have author names\n"
+	} else {
+		vr.Valid = false
+		vr.Summary = "Not all commit messages have author names\n"
 	}
-	for _, v := range vm {
-		if !v {
-			for i, m := range m.authorNames {
-				if !vm[i] {
-					vr.Message = append(vr.Message, fmt.Sprintf("Commit Message: \"%s\" has no author name\n", m))
-				}
-			}
+	vr.Messages = make(map[string]ResultMessage, len(m.authorNames))
+	for i := range m.authorNames {
+		vr.Assertions++
+		if !vm[i] {
+			vr.Messages[i] = ResultMessage{false, fmt.Sprintf("Commit Message: \"%s\" has no author name\n", i)}
+			vr.Failures++
+		} else {
+			vr.Messages[i] = ResultMessage{true, fmt.Sprintf("Commit Message: \"%s\" has author name\n", i)}
 		}
 	}
 	return &vr, nil
 }
 
 func (m AuthorNameValidator) hasAuthorName() (map[string]bool, error) {
-	am := make(map[string]bool)
+	am := make(map[string]bool, len(m.authorNames))
 	for ch, an := range m.authorNames {
 		if an != "" {
 			am[ch] = true

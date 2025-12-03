@@ -17,7 +17,10 @@ type BranchValidator struct {
 func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
 	log.Debug("Validating Branch")
 	vr := ValidationResult{
-		Validator: "Branch",
+		Validator:  "Branch",
+		Messages:   make(map[string]ResultMessage, 1),
+		Failures:   0,
+		Assertions: 0,
 	}
 	defer func() {
 		vr.Duration = utils.Duration(time.Now())
@@ -28,12 +31,16 @@ func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
 		return nil, err
 	}
 	valid, err := b.isConventional()
+	vr.Assertions++
 	if valid {
 		vr.Valid = true
-		vr.Message = append(vr.Message, fmt.Sprintf("Branch name \"%s\" is conventional", b.branchName))
+		vr.Summary = fmt.Sprintf("Branch name is conventional")
+		vr.Messages["branch"] = ResultMessage{true, fmt.Sprintf("Branch name \"%s\" is conventional", b.branchName)}
 	} else {
 		vr.Valid = false
-		vr.Message = append(vr.Message, fmt.Sprintf("Branch name \"%s\" is not conventional", b.branchName))
+		vr.Summary = fmt.Sprintf("Branch name is not conventional")
+		vr.Messages["branch"] = ResultMessage{false, fmt.Sprintf("Branch name \"%s\" is not conventional", b.branchName)}
+		vr.Failures++
 	}
 	if err != nil {
 		return nil, err
@@ -42,12 +49,11 @@ func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
 }
 
 func (b BranchValidator) isConventional() (bool, error) {
-	var s []bool
-	s = make([]bool, 0, 5)
+	var s = make(map[string]bool, 1)
 	matched, err := regexp.Match(`^(feature|feat|bugfix|fix|hotfix|release|chore|docs|test|refactor)/[a-zA-Z0-9._-]+$`, []byte(b.branchName))
 	if err != nil {
 		return false, fmt.Errorf("can't match branch name")
 	}
-	s = append(s, matched)
-	return utils.AllTrueSlice(s), nil
+	s["branch"] = matched
+	return utils.AllTrue(s), nil
 }

@@ -20,15 +20,15 @@ func PrintResultTable(l []*validator.ValidationResult) {
 		vm := ""
 		itemStyle := itemStyleGreen
 		if v.Valid {
-			vm = fmt.Sprintf("%s %s", v.Validator, "✓")
+			vm = fmt.Sprintf("%s %s: %s", v.Validator, "✓", v.Summary)
 			itemStyle = itemStyleGreen
 		} else {
-			vm = fmt.Sprintf("%s %s", v.Validator, "✗")
+			vm = fmt.Sprintf("%s %s: %s", v.Validator, "✗", v.Summary)
 			itemStyle = itemStyleRed
 		}
 		r := tree.Root(vm)
-		for m := range v.Message {
-			r.Child(v.Message[m])
+		for m := range v.Messages {
+			r.Child(v.Messages[m].Message)
 		}
 		r.ItemStyle(itemStyle)
 		t.Child(r)
