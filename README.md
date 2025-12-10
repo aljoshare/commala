@@ -28,7 +28,7 @@ commala is a commit linting tool that ensures that certain standards are met bef
 
 ## Getting started
 
-If you want to use it on Github, try out the [Github Action](https://github.com/aljoshare/commala-action). For Gitlab CI/CD, you can copy [this example](examples/gitlab/.gitlab-ci.yml) and modify it to your needs.
+If you want to use it on Github, try out the [Github Action](https://github.com/aljoshare/commala-action). You can find an example workflow [here](examples/github/example.yml). For Gitlab CI/CD, you can copy [this example](examples/gitlab/.gitlab-ci.yml) and modify it to your needs.
 
 ### Configuration
 
