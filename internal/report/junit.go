@@ -13,11 +13,16 @@ type Failure struct {
 	Type    string `xml:"type,attr"`
 }
 
+type Skipped struct {
+	Message string `xml:"message,attr,omitempty"`
+}
+
 type TestCase struct {
 	XMLName xml.Name `xml:"testcase"`
 	Name    string   `xml:"name,attr"`
 	Time    string   `xml:"time,attr"`
 	Failure *Failure `xml:"failure,omitempty"`
+	Skipped *Skipped `xml:"skipped,omitempty"`
 }
 
 type TestSuite struct {
@@ -45,7 +50,7 @@ func NewJUnitReport(vr []*validator.ValidationResult, path string) error {
 			Time:       "0",
 			Failures:   v.Failures,
 			Errors:     0,
-			Skipped:    0,
+			Skipped:    v.Skipped,
 			Assertions: v.Assertions,
 			Tc:         make([]*TestCase, 0, 1),
 		}
@@ -54,8 +59,13 @@ func NewJUnitReport(vr []*validator.ValidationResult, path string) error {
 				Name:    i,
 				Time:    v.Duration.String(),
 				Failure: nil,
+				Skipped: nil,
 			}
-			if !m.Valid {
+			if m.Skipped {
+				tc.Skipped = &Skipped{
+					Message: m.SkipReason,
+				}
+			} else if !m.Valid {
 				tc.Failure = &Failure{
 					Message: m.Message,
 					Type:    v.Validator,

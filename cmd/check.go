@@ -34,6 +34,26 @@ func init() {
 	queryCmd.Flags().Bool("signoff-enabled", true, "Flag to enable/disable sign-off validation")
 	viper.BindEnv("validate.signoff.enabled", "COMMALA_VALIDATE_SIGNOFF_ENABLED")
 	viper.BindPFlag("validate.signoff.enabled", queryCmd.Flags().Lookup("signoff-enabled"))
+
+	queryCmd.Flags().StringSlice("branch-whitelist", []string{}, "Contributor emails to whitelist for branch validation")
+	viper.BindEnv("validate.branch.whitelist", "COMMALA_VALIDATE_BRANCH_WHITELIST")
+	viper.BindPFlag("validate.branch.whitelist", queryCmd.Flags().Lookup("branch-whitelist"))
+
+	queryCmd.Flags().StringSlice("message-whitelist", []string{}, "Contributor emails to whitelist for message validation")
+	viper.BindEnv("validate.message.whitelist", "COMMALA_VALIDATE_MESSAGE_WHITELIST")
+	viper.BindPFlag("validate.message.whitelist", queryCmd.Flags().Lookup("message-whitelist"))
+
+	queryCmd.Flags().StringSlice("signoff-whitelist", []string{}, "Contributor emails to whitelist for signoff validation")
+	viper.BindEnv("validate.signoff.whitelist", "COMMALA_VALIDATE_SIGNOFF_WHITELIST")
+	viper.BindPFlag("validate.signoff.whitelist", queryCmd.Flags().Lookup("signoff-whitelist"))
+
+	queryCmd.Flags().StringSlice("author-name-whitelist", []string{}, "Contributor emails to whitelist for author name validation")
+	viper.BindEnv("validate.author.name.whitelist", "COMMALA_VALIDATE_AUTHOR_NAME_WHITELIST")
+	viper.BindPFlag("validate.author.name.whitelist", queryCmd.Flags().Lookup("author-name-whitelist"))
+
+	queryCmd.Flags().StringSlice("author-email-whitelist", []string{}, "Contributor emails to whitelist for author email validation")
+	viper.BindEnv("validate.author.email.whitelist", "COMMALA_VALIDATE_AUTHOR_EMAIL_WHITELIST")
+	viper.BindPFlag("validate.author.email.whitelist", queryCmd.Flags().Lookup("author-email-whitelist"))
 }
 
 var queryCmd = &cobra.Command{

@@ -5,11 +5,16 @@ validate:
   author:
     email:
       enabled: true
+      whitelist: []
     name:
       enabled: true
+      whitelist: []
   branch:
     enabled: true
+    whitelist: []
   message:
     enabled: true
+    whitelist: []
   signoff:
     enabled: true
+    whitelist: []

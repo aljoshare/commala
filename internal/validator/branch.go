@@ -14,18 +14,33 @@ type BranchValidator struct {
 	branchName string
 }
 
-func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
+func (b BranchValidator) Validate(g git.Git, whitelist []string) (*ValidationResult, error) {
 	log.Debug("Validating Branch")
 	vr := ValidationResult{
 		Validator:  "Branch",
 		Messages:   make(map[string]ResultMessage, 1),
 		Failures:   0,
 		Assertions: 0,
+		Skipped:    0,
 	}
 	defer func() {
 		vr.Duration = utils.Duration(time.Now())
 	}()
-	var err error
+
+	// Check if branch author is whitelisted
+	whitelisted, authorEmail, err := IsBranchAuthorWhitelisted(whitelist, g)
+	if err != nil {
+		return nil, err
+	}
+
+	if whitelisted {
+		vr.Valid = true
+		vr.Skipped++
+		vr.Summary = fmt.Sprintf("Branch validation skipped (1 skipped)")
+		vr.Messages["branch"] = NewSkippedResultMessage(authorEmail)
+		return &vr, nil
+	}
+
 	b.branchName, err = g.GetBranchName()
 	if err != nil {
 		return nil, err
@@ -35,11 +50,11 @@ func (b BranchValidator) Validate(g git.Git) (*ValidationResult, error) {
 	if valid {
 		vr.Valid = true
 		vr.Summary = fmt.Sprintf("Branch name is conventional")
-		vr.Messages["branch"] = ResultMessage{true, fmt.Sprintf("Branch name \"%s\" is conventional", b.branchName)}
+		vr.Messages["branch"] = ResultMessage{Valid: true, Message: fmt.Sprintf("Branch name \"%s\" is conventional", b.branchName)}
 	} else {
 		vr.Valid = false
 		vr.Summary = fmt.Sprintf("Branch name is not conventional")
-		vr.Messages["branch"] = ResultMessage{false, fmt.Sprintf("Branch name \"%s\" is not conventional", b.branchName)}
+		vr.Messages["branch"] = ResultMessage{Valid: false, Message: fmt.Sprintf("Branch name \"%s\" is not conventional", b.branchName)}
 		vr.Failures++
 	}
 	if err != nil {

@@ -13,12 +13,13 @@ type AuthorEmailValidator struct {
 	authorEmails map[string]string
 }
 
-func (m AuthorEmailValidator) Validate(cr *git.CommitRange, g git.Git) (*ValidationResult, error) {
+func (m AuthorEmailValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []string) (*ValidationResult, error) {
 	log.Debugf("Validating if commits has author emails from %s to %s", cr.From, cr.To)
 	vr := ValidationResult{
 		Validator:  "Author Email",
 		Assertions: 0,
 		Failures:   0,
+		Skipped:    0,
 	}
 	defer func() {
 		vr.Duration = utils.Duration(time.Now())
@@ -32,21 +33,46 @@ func (m AuthorEmailValidator) Validate(cr *git.CommitRange, g git.Git) (*Validat
 	if err != nil {
 		return nil, err
 	}
-	if utils.AllTrue(vm) {
-		vr.Valid = true
-		vr.Summary = "All commit messages have author email set\n"
-	} else {
-		vr.Valid = true
-		vr.Summary = "Not all commit messages have author email set\n"
-	}
+
 	vr.Messages = make(map[string]ResultMessage, len(m.authorEmails))
-	for i := range m.authorEmails {
+	for commitHash := range m.authorEmails {
+		// Check whitelist before validation
+		whitelisted, matchedEmail, err := IsWhitelisted(commitHash, whitelist, g, cr)
+		if err != nil {
+			return nil, err
+		}
+
+		if whitelisted {
+			vr.Skipped++
+			vr.Messages[commitHash] = NewSkippedResultMessage(matchedEmail)
+			continue
+		}
+
 		vr.Assertions++
-		if !vm[i] {
-			vr.Messages[i] = ResultMessage{false, fmt.Sprintf("Commit Message: \"%s\" has no author email\n", i)}
+		if !vm[commitHash] {
+			vr.Messages[commitHash] = ResultMessage{Valid: false, Message: fmt.Sprintf("Commit Message: \"%s\" has no author email\n", commitHash)}
 			vr.Failures++
 		} else {
-			vr.Messages[i] = ResultMessage{true, fmt.Sprintf("Commit Message: \"%s\" has author email\n", i)}
+			vr.Messages[commitHash] = ResultMessage{Valid: true, Message: fmt.Sprintf("Commit Message: \"%s\" has author email\n", commitHash)}
+		}
+	}
+
+	// Update summary with skip count
+	if vr.Failures == 0 {
+		vr.Valid = true
+		if vr.Skipped > 0 {
+			vr.Summary = fmt.Sprintf("All author emails are present (%d skipped)\n", vr.Skipped)
+		} else {
+			vr.Summary = "All commit messages have author email set\n"
+		}
+	} else {
+		vr.Valid = true
+		totalChecked := vr.Assertions + vr.Skipped
+		passedCount := vr.Assertions - vr.Failures
+		if vr.Skipped > 0 {
+			vr.Summary = fmt.Sprintf("%d of %d author emails are present (%d skipped)\n", passedCount, totalChecked, vr.Skipped)
+		} else {
+			vr.Summary = "Not all commit messages have author email set\n"
 		}
 	}
 	return &vr, nil

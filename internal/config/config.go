@@ -8,12 +8,17 @@ import (
 )
 
 type Config struct {
-	ReportJunitPath    string
-	AuthorEmailEnabled bool
-	AuthorNameEnabled  bool
-	BranchEnabled      bool
-	MessageEnabled     bool
-	SignOffEnabled     bool
+	ReportJunitPath      string
+	AuthorEmailEnabled   bool
+	AuthorEmailWhitelist []string
+	AuthorNameEnabled    bool
+	AuthorNameWhitelist  []string
+	BranchEnabled        bool
+	BranchWhitelist      []string
+	MessageEnabled       bool
+	MessageWhitelist     []string
+	SignOffEnabled       bool
+	SignOffWhitelist     []string
 }
 
 func (c *Config) ReadConfig() {
@@ -39,8 +44,13 @@ func (c *Config) ReadConfig() {
 	}
 	c.ReportJunitPath = viper.GetString("report.junit.path")
 	c.AuthorEmailEnabled = viper.GetBool("validate.author.email.enabled")
+	c.AuthorEmailWhitelist = viper.GetStringSlice("validate.author.email.whitelist")
 	c.AuthorNameEnabled = viper.GetBool("validate.author.name.enabled")
+	c.AuthorNameWhitelist = viper.GetStringSlice("validate.author.name.whitelist")
 	c.BranchEnabled = viper.GetBool("validate.branch.enabled")
+	c.BranchWhitelist = viper.GetStringSlice("validate.branch.whitelist")
 	c.MessageEnabled = viper.GetBool("validate.message.enabled")
+	c.MessageWhitelist = viper.GetStringSlice("validate.message.whitelist")
 	c.SignOffEnabled = viper.GetBool("validate.signoff.enabled")
+	c.SignOffWhitelist = viper.GetStringSlice("validate.signoff.whitelist")
 }
