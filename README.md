@@ -38,19 +38,59 @@ You can configure commala via `.commala.yml` or command line parameters:
 report:
   junit:
     path: commala-junit.xml # --report-junit-path
-validators:
+validate:
   author:
     name:
       enabled: true # --author-name-enabled
+      whitelist: [] # --author-name-whitelist
     email:
       enabled: true # --author-email-enabled
+      whitelist: [] # --author-email-whitelist
   branch:
     enabled: true # --branch-enabled
+    whitelist: [] # --branch-whitelist
   message:
     enabled: true # --message-enabled
+    whitelist: [] # --message-whitelist
   signoff:
     enabled: true # --signoff-enabled
+    whitelist: [] # --signoff-whitelist
 ```
+
+### Contributor Whitelists
+
+Commala supports whitelisting specific contributors (by email) to skip validation for their commits. This is useful for automated bot accounts like Dependabot or Renovate that may not follow conventional commit standards.
+
+Each validator can have its own whitelist configured via `.commala.yml`:
+
+```yaml
+validate:
+  branch:
+    enabled: true
+    whitelist:
+      - "dependabot[bot]@users.noreply.github.com"
+      - "renovate[bot]@users.noreply.github.com"
+  message:
+    enabled: true
+    whitelist:
+      - "dependabot[bot]@users.noreply.github.com"
+```
+
+Or via CLI flags:
+
+```bash
+commala check HEAD~5 \
+  --branch-whitelist="dependabot[bot]@users.noreply.github.com" \
+  --message-whitelist="dependabot[bot]@users.noreply.github.com"
+```
+
+**How It Works:**
+
+- Commits from whitelisted authors are marked as "skipped" during validation
+- Skipped commits are clearly marked in console output (gray color)
+- JUnit reports include `<skipped>` elements for whitelisted commits
+- Skipped commits don't count as failures
+- Whitelist matching uses exact email comparison (case-sensitive)
 
 ### CLI
 

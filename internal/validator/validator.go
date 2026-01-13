@@ -15,19 +15,19 @@ func Validate(cr *git.CommitRange, g git.Git, c config.Config) ([]*ValidationRes
 		validate func() (*ValidationResult, error)
 	}{
 		{c.BranchEnabled, func() (*ValidationResult, error) {
-			return BranchValidator{}.Validate(g)
+			return BranchValidator{}.Validate(g, c.BranchWhitelist)
 		}},
 		{c.MessageEnabled, func() (*ValidationResult, error) {
-			return MessageValidator{}.Validate(cr, g)
+			return MessageValidator{}.Validate(cr, g, c.MessageWhitelist)
 		}},
 		{c.SignOffEnabled, func() (*ValidationResult, error) {
-			return SignOffValidator{}.Validate(cr, g)
+			return SignOffValidator{}.Validate(cr, g, c.SignOffWhitelist)
 		}},
 		{c.AuthorNameEnabled, func() (*ValidationResult, error) {
-			return AuthorNameValidator{}.Validate(cr, g)
+			return AuthorNameValidator{}.Validate(cr, g, c.AuthorNameWhitelist)
 		}},
 		{c.AuthorEmailEnabled, func() (*ValidationResult, error) {
-			return AuthorEmailValidator{}.Validate(cr, g)
+			return AuthorEmailValidator{}.Validate(cr, g, c.AuthorEmailWhitelist)
 		}},
 	}
 

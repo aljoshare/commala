@@ -42,7 +42,7 @@ func TestSignOffValidate(t *testing.T) {
 		From: "commit1",
 		To:   "commit2",
 	}
-	result, err := v.Validate(&r, m)
+	result, err := v.Validate(&r, m, []string{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}

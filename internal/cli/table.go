@@ -15,6 +15,7 @@ func PrintResultTable(l []*validator.ValidationResult) {
 	itemStyleNeutral := lipgloss.NewStyle().Foreground(lipgloss.Color("#eda13e"))
 	itemStyleGreen := lipgloss.NewStyle().Foreground(lipgloss.Color("#5fa29c"))
 	itemStyleRed := lipgloss.NewStyle().Foreground(lipgloss.Color("#d25b5b"))
+	itemStyleLightGreen := lipgloss.NewStyle().Foreground(lipgloss.Color("#90ee90"))
 	t := tree.Root(fmt.Sprintf("%s %s %s", emoji.Rose, "commala - A commit linter with a lot of rice", emoji.RiceBall))
 	for _, v := range l {
 		vm := ""
@@ -28,7 +29,14 @@ func PrintResultTable(l []*validator.ValidationResult) {
 		}
 		r := tree.Root(vm)
 		for m := range v.Messages {
-			r.Child(v.Messages[m].Message)
+			msg := v.Messages[m]
+			if msg.Skipped {
+				skippedChild := tree.Root(msg.Message)
+				itemStyle = itemStyleLightGreen
+				r.Child(skippedChild)
+			} else {
+				r.Child(msg.Message)
+			}
 		}
 		r.ItemStyle(itemStyle)
 		t.Child(r)
