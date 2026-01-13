@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/aljoshare/commala/compare/v0.4.1...v0.5.0) (2026-01-13)
+
+
+### Features
+
+* support contributor whitelisting ([#48](https://github.com/aljoshare/commala/issues/48)) ([7fc8cea](https://github.com/aljoshare/commala/commit/7fc8ceafe28f555dca41ebc94c87417e7c8257f4))
+
+
+### Bug Fixes
+
+* **deps:** bump github.com/spf13/cobra from 1.10.1 to 1.10.2 ([#42](https://github.com/aljoshare/commala/issues/42)) ([a05dde0](https://github.com/aljoshare/commala/commit/a05dde09f7a430894b18e86ca1d45d9142b7b941))
+
 ## [0.4.1](https://github.com/aljoshare/commala/compare/v0.4.0...v0.4.1) (2025-12-03)
 
 
