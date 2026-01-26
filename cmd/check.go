@@ -16,6 +16,9 @@ import (
 
 func init() {
 	MainCmd.AddCommand(queryCmd)
+	queryCmd.Flags().String("config", "", "Path to the configuration file")
+	viper.BindEnv("config", "COMMALA_CONFIG")
+	viper.BindPFlag("config", queryCmd.Flags().Lookup("config"))
 	queryCmd.Flags().String("report-junit-path", "commala-junit.xml", "Path of the JUnit report")
 	viper.BindEnv("report.junit.path", "COMMALA_REPORT_JUNIT_PATH")
 	viper.BindPFlag("report.junit.path", queryCmd.Flags().Lookup("report-junit-path"))

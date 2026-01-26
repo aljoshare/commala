@@ -32,7 +32,11 @@ If you want to use it on Github, try out the [Github Action](https://github.com/
 
 ### Configuration
 
-You can configure commala via `.commala.yml` or command line parameters:
+You can configure commala via `.commala.yml` or command line parameters. By default, commala looks for `.commala.yml` in the current directory or `$HOME/.commala/`. You can specify a custom config file path using the `--config` flag or `COMMALA_CONFIG` environment variable:
+
+```shell
+commala check HEAD~5 --config=/path/to/custom-config.yml
+```
 
 ```yaml
 report:

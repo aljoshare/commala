@@ -22,10 +22,15 @@ type Config struct {
 }
 
 func (c *Config) ReadConfig() {
-	viper.SetConfigName(".commala")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("$HOME/.commala")
-	viper.AddConfigPath(".")
+	configPath := viper.GetString("config")
+	if configPath != "" {
+		viper.SetConfigFile(configPath)
+	} else {
+		viper.SetConfigName(".commala")
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath("$HOME/.commala")
+		viper.AddConfigPath(".")
+	}
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			dirname, err := os.UserHomeDir()
