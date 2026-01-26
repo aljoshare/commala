@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/aljoshare/commala/compare/v0.5.0...v0.6.0) (2026-01-26)
+
+
+### Features
+
+* support path to config file ([#54](https://github.com/aljoshare/commala/issues/54)) ([9c02737](https://github.com/aljoshare/commala/commit/9c027372959b341573b0feb8ad733039b4e308aa))
+
+
+### Bug Fixes
+
+* **deps:** bump github.com/sirupsen/logrus from 1.9.3 to 1.9.4 ([#51](https://github.com/aljoshare/commala/issues/51)) ([b2dab7c](https://github.com/aljoshare/commala/commit/b2dab7c57e0f244eedc5ceb9411a546120863bbd))
+
 ## [0.5.0](https://github.com/aljoshare/commala/compare/v0.4.1...v0.5.0) (2026-01-13)
 
 
