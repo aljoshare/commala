@@ -42,8 +42,8 @@ github.com/charmbracelet/colorprofile
 ## explicit; go 1.18
 github.com/charmbracelet/lipgloss
 github.com/charmbracelet/lipgloss/tree
-# github.com/charmbracelet/log v0.4.2
-## explicit; go 1.19
+# github.com/charmbracelet/log v1.0.0
+## explicit; go 1.21
 github.com/charmbracelet/log
 # github.com/charmbracelet/x/ansi v0.8.0
 ## explicit; go 1.18
@@ -152,8 +152,8 @@ github.com/go-git/go-git/v6/utils/merkletrie/internal/frame
 github.com/go-git/go-git/v6/utils/merkletrie/noder
 github.com/go-git/go-git/v6/utils/sync
 github.com/go-git/go-git/v6/utils/trace
-# github.com/go-logfmt/logfmt v0.6.0
-## explicit; go 1.17
+# github.com/go-logfmt/logfmt v0.6.1
+## explicit; go 1.21
 github.com/go-logfmt/logfmt
 # github.com/go-viper/mapstructure/v2 v2.4.0
 ## explicit; go 1.18
@@ -162,8 +162,6 @@ github.com/go-viper/mapstructure/v2/internal/errors
 # github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 ## explicit; go 1.20
 github.com/golang/groupcache/lru
-# github.com/google/go-cmp v0.7.0
-## explicit; go 1.21
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
