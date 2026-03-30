@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/aljoshare/commala/compare/v0.6.0...v0.6.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* **deps:** bump github.com/charmbracelet/log from 0.4.2 to 1.0.0 ([#72](https://github.com/aljoshare/commala/issues/72)) ([27a5a42](https://github.com/aljoshare/commala/commit/27a5a4225ddc6de6fc76a28b2b45e72bb76c18fb))
+* **deps:** bump github.com/cloudflare/circl from 1.6.1 to 1.6.3 ([#65](https://github.com/aljoshare/commala/issues/65)) ([c8c8ca6](https://github.com/aljoshare/commala/commit/c8c8ca6308b3f3b5b41f9d993ece4e874af64140))
+
 ## [0.6.0](https://github.com/aljoshare/commala/compare/v0.5.0...v0.6.0) (2026-01-26)
 
 
