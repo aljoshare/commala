@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 
+	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
 	"github.com/go-git/go-git/v6/plumbing/format/pktline"
@@ -25,6 +26,13 @@ type UploadPackOptions struct {
 	GitProtocol   string
 	AdvertiseRefs bool
 	StatelessRPC  bool
+
+	// SkipDeltaCompression disables delta compression when encoding the
+	// packfile. When false, the repository pack.window configuration is used.
+	//
+	// Disabling delta compression significantly improves performance for local
+	// transfers where recomputing deltas is unnecessary.
+	SkipDeltaCompression bool
 }
 
 // UploadPack is a server command that serves the upload-pack service.
@@ -202,7 +210,8 @@ func UploadPack(
 				}
 			}
 
-			if !done {
+			switch {
+			case !done:
 				if multiAck || multiAckDetailed {
 					// Encode a NAK for multi-ack
 					srvrsp := packp.ServerResponse{}
@@ -211,7 +220,7 @@ func UploadPack(
 						return
 					}
 				}
-			} else if !ack.Hash.IsZero() && (multiAck || multiAckDetailed) {
+			case !ack.Hash.IsZero() && (multiAck || multiAckDetailed):
 				// We're done, send the final ACK
 				ack.Status = 0
 				srvrsp := packp.ServerResponse{ACKs: []packp.ACK{ack}}
@@ -219,7 +228,7 @@ func UploadPack(
 					writec <- fmt.Errorf("sending final ack server-response: %w", err)
 					return
 				}
-			} else if ack.Hash.IsZero() {
+			case ack.Hash.IsZero():
 				// We don't have multi-ack and there are no haves. Encode a NAK.
 				srvrsp := packp.ServerResponse{}
 				if err := srvrsp.Encode(w); err != nil {
@@ -246,7 +255,7 @@ func UploadPack(
 
 	objs, err := objectsToUpload(st, wants, haves)
 	if err != nil {
-		w.Close() //nolint:errcheck
+		_ = w.Close()
 		return fmt.Errorf("getting objects to upload: %w", err)
 	}
 
@@ -254,20 +263,27 @@ func UploadPack(
 		useSideband bool
 		writer      io.Writer = w
 	)
-	if !caps.Supports(capability.NoProgress) {
-		if caps.Supports(capability.Sideband64k) {
-			writer = sideband.NewMuxer(sideband.Sideband64k, w)
-			useSideband = true
-		} else if caps.Supports(capability.Sideband) {
-			writer = sideband.NewMuxer(sideband.Sideband, w)
-			useSideband = true
-		}
+	if caps.Supports(capability.Sideband64k) {
+		writer = sideband.NewMuxer(sideband.Sideband64k, w)
+		useSideband = true
+	} else if caps.Supports(capability.Sideband) {
+		writer = sideband.NewMuxer(sideband.Sideband, w)
+		useSideband = true
 	}
 
 	// TODO: Support shallow-file
 	// TODO: Support thin-pack
+	var packWindow uint
+	if opts.SkipDeltaCompression {
+		packWindow = 0
+	} else if cfg, cerr := st.Config(); cerr == nil && cfg != nil {
+		packWindow = cfg.Pack.Window
+	} else {
+		packWindow = config.DefaultPackWindow
+	}
+
 	e := packfile.NewEncoder(writer, st, false)
-	_, err = e.Encode(objs, 10)
+	_, err = e.Encode(objs, packWindow)
 	if err != nil {
 		return fmt.Errorf("encoding packfile: %w", err)
 	}
@@ -353,7 +369,6 @@ func getShallowCommits(st storage.Storer, heads []plumbing.Hash, depth int, upd 
 				curDepth = depths[commit]
 			}
 		}
-
 	}
 
 	return nil
