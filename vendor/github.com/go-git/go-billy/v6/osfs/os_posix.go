@@ -1,5 +1,4 @@
 //go:build !plan9 && !windows && !wasm
-// +build !plan9,!windows,!wasm
 
 package osfs
 
@@ -14,14 +13,18 @@ func (f *file) Lock() error {
 	f.m.Lock()
 	defer f.m.Unlock()
 
-	return unix.Flock(int(f.Fd()), unix.LOCK_EX)
+	return unix.Flock(int(f.File.Fd()), unix.LOCK_EX)
 }
 
 func (f *file) Unlock() error {
 	f.m.Lock()
 	defer f.m.Unlock()
 
-	return unix.Flock(int(f.Fd()), unix.LOCK_UN)
+	return unix.Flock(int(f.File.Fd()), unix.LOCK_UN)
+}
+
+func (f *file) Sync() error {
+	return f.File.Sync()
 }
 
 func rename(from, to string) error {
@@ -35,4 +38,10 @@ func umask(m int) func() {
 	return func() {
 		syscall.Umask(old)
 	}
+}
+
+// Fd exposes the underlying [os.File.Fd] func, which returns the
+// system file descriptor or handle referencing the open file.
+func (f *file) Fd() (uintptr, bool) {
+	return f.File.Fd(), true
 }

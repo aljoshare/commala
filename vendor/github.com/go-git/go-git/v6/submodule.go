@@ -8,12 +8,14 @@ import (
 	"path"
 
 	"github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/format/index"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
+// Submodule errors.
 var (
 	ErrSubmoduleAlreadyInitialized = errors.New("submodule already initialized")
 	ErrSubmoduleNotInitialized     = errors.New("submodule not initialized")
@@ -69,7 +71,7 @@ func (s *Submodule) status(idx *index.Index) (*SubmoduleStatus, error) {
 	}
 
 	e, err := idx.Entry(s.c.Path)
-	if err != nil && err != index.ErrEntryNotFound {
+	if err != nil && !errors.Is(err, index.ErrEntryNotFound) {
 		return nil, err
 	}
 
@@ -91,7 +93,7 @@ func (s *Submodule) status(idx *index.Index) (*SubmoduleStatus, error) {
 		status.Current = head.Hash()
 	}
 
-	if err != nil && err == plumbing.ErrReferenceNotFound {
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
 		err = nil
 	}
 
@@ -110,7 +112,7 @@ func (s *Submodule) Repository() (*Repository, error) {
 	}
 
 	_, err = storer.Reference(plumbing.HEAD)
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return nil, err
 	}
 
@@ -133,18 +135,18 @@ func (s *Submodule) Repository() (*Repository, error) {
 		return nil, err
 	}
 
-	moduleEndpoint, err := transport.NewEndpoint(s.c.URL)
+	moduleEndpoint, err := transport.ParseURL(s.c.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	if !path.IsAbs(moduleEndpoint.Path) && moduleEndpoint.Protocol == "file" {
+	if !path.IsAbs(moduleEndpoint.Path) && moduleEndpoint.Scheme == "file" {
 		remotes, err := s.w.r.Remotes()
 		if err != nil {
 			return nil, err
 		}
 
-		rootEndpoint, err := transport.NewEndpoint(remotes[0].c.URLs[0])
+		rootEndpoint, err := transport.ParseURL(remotes[0].c.URLs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -232,19 +234,19 @@ func (s *Submodule) doRecursiveUpdate(ctx context.Context, r *Repository, o *Sub
 		return err
 	}
 
-	new := &SubmoduleUpdateOptions{}
-	*new = *o
+	opts := &SubmoduleUpdateOptions{}
+	*opts = *o
 
-	new.RecurseSubmodules--
-	return l.UpdateContext(ctx, new)
+	opts.RecurseSubmodules--
+	return l.UpdateContext(ctx, opts)
 }
 
 func (s *Submodule) fetchAndCheckout(
 	ctx context.Context, r *Repository, o *SubmoduleUpdateOptions, hash plumbing.Hash,
 ) error {
 	if !o.NoFetch {
-		err := r.FetchContext(ctx, &FetchOptions{Auth: o.Auth, Depth: o.Depth})
-		if err != nil && err != NoErrAlreadyUpToDate {
+		err := r.FetchContext(ctx, &FetchOptions{ClientOptions: o.ClientOptions, Depth: o.Depth})
+		if err != nil && !errors.Is(err, NoErrAlreadyUpToDate) {
 			return err
 		}
 	}
@@ -263,9 +265,9 @@ func (s *Submodule) fetchAndCheckout(
 			refSpec := config.RefSpec("+" + hash.String() + ":" + hash.String())
 
 			err := r.FetchContext(ctx, &FetchOptions{
-				Auth:     o.Auth,
-				RefSpecs: []config.RefSpec{refSpec},
-				Depth:    o.Depth,
+				ClientOptions: o.ClientOptions,
+				RefSpecs:      []config.RefSpec{refSpec},
+				Depth:         o.Depth,
 			})
 			if err != nil && !errors.Is(err, NoErrAlreadyUpToDate) && !errors.Is(err, ErrExactSHA1NotSupported) {
 				return err
