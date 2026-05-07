@@ -1,6 +1,3 @@
-# dario.cat/mergo v1.0.1
-## explicit; go 1.13
-dario.cat/mergo
 # github.com/Microsoft/go-winio v0.6.2
 ## explicit; go 1.21
 github.com/Microsoft/go-winio
@@ -8,8 +5,8 @@ github.com/Microsoft/go-winio/internal/fs
 github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/ProtonMail/go-crypto v1.3.0
-## explicit; go 1.22.0
+# github.com/ProtonMail/go-crypto v1.4.1
+## explicit; go 1.23.0
 github.com/ProtonMail/go-crypto/bitcurves
 github.com/ProtonMail/go-crypto/brainpool
 github.com/ProtonMail/go-crypto/eax
@@ -70,9 +67,10 @@ github.com/cloudflare/circl/math/mlsbset
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
-# github.com/cyphar/filepath-securejoin v0.4.1
+# github.com/cyphar/filepath-securejoin v0.6.1
 ## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
+github.com/cyphar/filepath-securejoin/internal/consts
 # github.com/emirpasic/gods v1.18.1
 ## explicit; go 1.2
 github.com/emirpasic/gods/containers
@@ -94,25 +92,27 @@ github.com/go-git/gcfg/v2
 github.com/go-git/gcfg/v2/scanner
 github.com/go-git/gcfg/v2/token
 github.com/go-git/gcfg/v2/types
-# github.com/go-git/go-billy/v6 v6.0.0-20250627091229-31e2a16eef30
-## explicit; go 1.23.0
+# github.com/go-git/go-billy/v6 v6.0.0-20260424211911-732291493fb8
+## explicit; go 1.25.0
 github.com/go-git/go-billy/v6
 github.com/go-git/go-billy/v6/helper/chroot
 github.com/go-git/go-billy/v6/helper/polyfill
 github.com/go-git/go-billy/v6/memfs
 github.com/go-git/go-billy/v6/osfs
 github.com/go-git/go-billy/v6/util
-# github.com/go-git/go-git/v6 v6.0.0-20250910120214-3a68d0404116
-## explicit; go 1.23.0
+# github.com/go-git/go-git/v6 v6.0.0-alpha.3
+## explicit; go 1.25.0
 github.com/go-git/go-git/v6
 github.com/go-git/go-git/v6/config
-github.com/go-git/go-git/v6/internal/path_util
+github.com/go-git/go-git/v6/internal/archive
+github.com/go-git/go-git/v6/internal/pathutil
 github.com/go-git/go-git/v6/internal/reference
 github.com/go-git/go-git/v6/internal/repository
 github.com/go-git/go-git/v6/internal/revision
 github.com/go-git/go-git/v6/internal/url
 github.com/go-git/go-git/v6/plumbing
 github.com/go-git/go-git/v6/plumbing/cache
+github.com/go-git/go-git/v6/plumbing/client
 github.com/go-git/go-git/v6/plumbing/color
 github.com/go-git/go-git/v6/plumbing/filemode
 github.com/go-git/go-git/v6/plumbing/format/config
@@ -122,12 +122,15 @@ github.com/go-git/go-git/v6/plumbing/format/idxfile
 github.com/go-git/go-git/v6/plumbing/format/index
 github.com/go-git/go-git/v6/plumbing/format/objfile
 github.com/go-git/go-git/v6/plumbing/format/packfile
+github.com/go-git/go-git/v6/plumbing/format/packfile/util
 github.com/go-git/go-git/v6/plumbing/format/pktline
+github.com/go-git/go-git/v6/plumbing/format/reflog
+github.com/go-git/go-git/v6/plumbing/format/revfile
 github.com/go-git/go-git/v6/plumbing/hash
 github.com/go-git/go-git/v6/plumbing/object
 github.com/go-git/go-git/v6/plumbing/protocol
+github.com/go-git/go-git/v6/plumbing/protocol/capability
 github.com/go-git/go-git/v6/plumbing/protocol/packp
-github.com/go-git/go-git/v6/plumbing/protocol/packp/capability
 github.com/go-git/go-git/v6/plumbing/protocol/packp/sideband
 github.com/go-git/go-git/v6/plumbing/revlist
 github.com/go-git/go-git/v6/plumbing/storer
@@ -143,6 +146,7 @@ github.com/go-git/go-git/v6/storage/filesystem
 github.com/go-git/go-git/v6/storage/filesystem/dotgit
 github.com/go-git/go-git/v6/storage/memory
 github.com/go-git/go-git/v6/utils/binary
+github.com/go-git/go-git/v6/utils/convert
 github.com/go-git/go-git/v6/utils/diff
 github.com/go-git/go-git/v6/utils/ioutil
 github.com/go-git/go-git/v6/utils/merkletrie
@@ -152,6 +156,10 @@ github.com/go-git/go-git/v6/utils/merkletrie/internal/frame
 github.com/go-git/go-git/v6/utils/merkletrie/noder
 github.com/go-git/go-git/v6/utils/sync
 github.com/go-git/go-git/v6/utils/trace
+github.com/go-git/go-git/v6/x/plugin
+github.com/go-git/go-git/v6/x/plugin/config
+github.com/go-git/go-git/v6/x/plugin/zlib
+github.com/go-git/go-git/v6/x/storage
 # github.com/go-logfmt/logfmt v0.6.1
 ## explicit; go 1.21
 github.com/go-logfmt/logfmt
@@ -159,13 +167,10 @@ github.com/go-logfmt/logfmt
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
 github.com/go-viper/mapstructure/v2/internal/errors
-# github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
-## explicit; go 1.20
-github.com/golang/groupcache/lru
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
-# github.com/kevinburke/ssh_config v1.4.0
+# github.com/kevinburke/ssh_config v1.6.0
 ## explicit; go 1.18
 github.com/kevinburke/ssh_config
 # github.com/klauspost/cpuid/v2 v2.3.0
@@ -190,7 +195,7 @@ github.com/pelletier/go-toml/v2/internal/characters
 github.com/pelletier/go-toml/v2/internal/danger
 github.com/pelletier/go-toml/v2/internal/tracker
 github.com/pelletier/go-toml/v2/unstable
-# github.com/pjbgf/sha1cd v0.5.0
+# github.com/pjbgf/sha1cd v0.6.0
 ## explicit; go 1.22
 github.com/pjbgf/sha1cd
 github.com/pjbgf/sha1cd/internal
@@ -244,8 +249,8 @@ github.com/xo/terminfo
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/crypto v0.45.0
-## explicit; go 1.24.0
+# golang.org/x/crypto v0.50.0
+## explicit; go 1.25.0
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blowfish
@@ -264,22 +269,24 @@ golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/ssh/knownhosts
 # golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b
 ## explicit; go 1.23.0
-golang.org/x/exp/maps
 golang.org/x/exp/slices
 golang.org/x/exp/slog
 golang.org/x/exp/slog/internal
 golang.org/x/exp/slog/internal/buffer
-# golang.org/x/net v0.47.0
-## explicit; go 1.24.0
+# golang.org/x/net v0.53.0
+## explicit; go 1.25.0
 golang.org/x/net/internal/socks
 golang.org/x/net/proxy
-# golang.org/x/sys v0.38.0
-## explicit; go 1.24.0
+# golang.org/x/sync v0.20.0
+## explicit; go 1.25.0
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.43.0
+## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.31.0
-## explicit; go 1.24.0
+# golang.org/x/text v0.36.0
+## explicit; go 1.25.0
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier

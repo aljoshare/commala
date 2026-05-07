@@ -3,17 +3,20 @@ package git
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/config"
+	giturl "github.com/go-git/go-git/v6/internal/url"
 	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp/sideband"
-	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
 // SubmoduleRecursivity defines how depth will affect any submodule recursive
@@ -30,14 +33,17 @@ const (
 	DefaultSubmoduleRecursionDepth SubmoduleRecursivity = 10
 )
 
+// ErrMissingURL is returned when a URL is required but not provided.
 var ErrMissingURL = errors.New("URL field is required")
 
 // CloneOptions describes how a clone should be performed.
 type CloneOptions struct {
 	// The (possibly remote) repository URL to clone from.
 	URL string
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
+	// ClientOptions configures the transport client used for this operation.
+	// Use client.WithSSHAuth, client.WithHTTPAuth, client.WithInsecureSkipTLS,
+	// client.WithCABundle, client.WithProxyURL, etc.
+	ClientOptions []client.Option
 	// Name of the remote to be added, by default `origin`.
 	RemoteName string
 	// Remote branch to clone.
@@ -70,12 +76,6 @@ type CloneOptions struct {
 	// Tags describe how the tags will be fetched from the remote repository,
 	// by default is AllTags.
 	Tags plumbing.TagMode
-	// InsecureSkipTLS skips ssl verify if protocol is https
-	InsecureSkipTLS bool
-	// CABundle specify additional ca bundle with system cert pool
-	CABundle []byte
-	// ProxyOptions provides info required for connecting to a proxy.
-	ProxyOptions transport.ProxyOptions
 	// When the repository to clone is on the local machine, instead of
 	// using hard links, automatically setup .git/objects/info/alternates
 	// to share the objects with the source repository.
@@ -91,6 +91,14 @@ type CloneOptions struct {
 	// Bare determines whether the repository will have a worktree (non-bare)
 	// or not (bare).
 	Bare bool
+	// AllowEmptyRepo when set to true, cloning an empty remote repository
+	// will not return an error. The resulting repository will be initialized
+	// with the remote configured but no commits.
+	AllowEmptyRepo bool
+
+	// worktree defines the worktree filesystem for non-bare clone operations.
+	// This is only used internally due to partial inits.
+	worktree billy.Filesystem
 }
 
 // MergeOptions describes how a merge should be performed.
@@ -112,10 +120,38 @@ const (
 	FastForwardMerge MergeStrategy = iota
 )
 
+// OrtMergeStrategyOption defines the merge strategy options for the ORT merge strategy, which can only resolve two heads using a 3-way merge algorithm.
+// Since Git v2.50.0, ORT is synonym of recursive.
+type OrtMergeStrategyOption int8
+
+const (
+	// TheirsMergeStrategy is a merge strategy option that auto-resolves the changes by accepting the incoming version of the changes.
+	TheirsMergeStrategy OrtMergeStrategyOption = iota
+
+	// OursMergeStrategy is a merge strategy option that auto-resolves the changes by accepting our version of the changes and rejecting the incoming changes.
+	OursMergeStrategy
+)
+
 // Validate validates the fields and sets the default values.
 func (o *CloneOptions) Validate() error {
 	if o.URL == "" {
 		return ErrMissingURL
+	}
+
+	// Resolve ..-relative local paths to absolute paths before they reach
+	// the transport layer. The billy chroot-based FilesystemLoader rejects
+	// any path whose clean form starts with ".." with "chroot boundary
+	// crossed". Real git resolves such paths against the working directory
+	// at the command level, before any transport code runs.
+	if giturl.IsLocalEndpoint(o.URL) && !filepath.IsAbs(o.URL) {
+		cleaned := filepath.Clean(o.URL)
+		if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			abs, err := filepath.Abs(o.URL)
+			if err != nil {
+				return fmt.Errorf("resolve local clone URL %q to absolute path: %w", o.URL, err)
+			}
+			o.URL = abs
+		}
 	}
 
 	if o.RemoteName == "" {
@@ -145,8 +181,8 @@ type PullOptions struct {
 	SingleBranch bool
 	// Limit fetching to the specified number of commits.
 	Depth int
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
+	// ClientOptions configures the transport client used for this operation.
+	ClientOptions []client.Option
 	// RecurseSubmodules controls if new commits of all populated submodules
 	// should be fetched too.
 	RecurseSubmodules SubmoduleRecursivity
@@ -157,12 +193,6 @@ type PullOptions struct {
 	// Force allows the pull to update a local branch even when the remote
 	// branch does not descend from it.
 	Force bool
-	// InsecureSkipTLS skips ssl verify if protocol is https
-	InsecureSkipTLS bool
-	// CABundle specify additional ca bundle with system cert pool
-	CABundle []byte
-	// ProxyOptions provides info required for connecting to a proxy.
-	ProxyOptions transport.ProxyOptions
 }
 
 // Validate validates the fields and sets the default values.
@@ -178,6 +208,7 @@ func (o *PullOptions) Validate() error {
 	return nil
 }
 
+// Tag modes for fetching.
 const (
 	InvalidTagMode = plumbing.InvalidTagMode
 	// TagFollowing any tag that points into the histories being fetched is also
@@ -201,8 +232,8 @@ type FetchOptions struct {
 	// Depth limit fetching to the specified number of commits from the tip of
 	// each remote branch history.
 	Depth int
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
+	// ClientOptions configures the transport client used for this operation.
+	ClientOptions []client.Option
 	// Progress is where the human readable information sent by the server is
 	// stored, if nil nothing is stored and the capability (if supported)
 	// no-progress, is sent to the server to avoid send this information.
@@ -213,12 +244,6 @@ type FetchOptions struct {
 	// Force allows the fetch to update a local branch even when the remote
 	// branch does not descend from it.
 	Force bool
-	// InsecureSkipTLS skips ssl verify if protocol is https
-	InsecureSkipTLS bool
-	// CABundle specify additional ca bundle with system cert pool
-	CABundle []byte
-	// ProxyOptions provides info required for connecting to a proxy.
-	ProxyOptions transport.ProxyOptions
 	// Prune specify that local refs that match given RefSpecs and that do
 	// not exist remotely will be removed.
 	Prune bool
@@ -261,8 +286,8 @@ type PushOptions struct {
 	//
 	// A refspec with empty src can be used to delete a reference.
 	RefSpecs []config.RefSpec
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
+	// ClientOptions configures the transport client used for this operation.
+	ClientOptions []client.Option
 	// Progress is where the human readable information sent by the server is
 	// stored, if nil nothing is stored.
 	Progress sideband.Progress
@@ -272,10 +297,6 @@ type PushOptions struct {
 	// Force allows the push to update a remote branch even when the local
 	// branch does not descend from it.
 	Force bool
-	// InsecureSkipTLS skips ssl verify if protocol is https
-	InsecureSkipTLS bool
-	// CABundle specify additional ca bundle with system cert pool
-	CABundle []byte
 	// RequireRemoteRefs only allows a remote ref to be updated if its current
 	// value is the one specified here.
 	RequireRemoteRefs []config.RefSpec
@@ -288,13 +309,14 @@ type PushOptions struct {
 	Options []string
 	// Atomic sets option to be an atomic push
 	Atomic bool
-	// ProxyOptions provides info required for connecting to a proxy.
-	ProxyOptions transport.ProxyOptions
+	// Quiet indicates whether the server should suppress human-readable
+	// output.
+	Quiet bool
 }
 
 // ForceWithLease sets fields on the lease
 // If neither RefName nor Hash are set, ForceWithLease protects
-// all refs in the refspec by ensuring the ref of the remote in the local repsitory
+// all refs in the refspec by ensuring the ref of the remote in the local repository
 // matches the one in the ref advertisement.
 type ForceWithLease struct {
 	// RefName, when set will protect the ref by ensuring it matches the
@@ -337,13 +359,14 @@ type SubmoduleUpdateOptions struct {
 	// the current repository but also in any nested submodules inside those
 	// submodules (and so on). Until the SubmoduleRecursivity is reached.
 	RecurseSubmodules SubmoduleRecursivity
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
+	// ClientOptions configures the transport client used for this operation.
+	ClientOptions []client.Option
 	// Depth limit fetching to the specified number of commits from the tip of
 	// each remote branch history.
 	Depth int
 }
 
+// Checkout errors.
 var (
 	ErrBranchHashExclusive  = errors.New("Branch and Hash are mutually exclusive")
 	ErrCreateRequiresBranch = errors.New("Branch is mandatory when Create is used")
@@ -411,6 +434,12 @@ const (
 	// resets the head to <commit>, just like all modes do). This leaves all
 	// your changed files "Changes to be committed", as git status would put it.
 	SoftReset
+	// KeepReset resets the index and updates files in the working tree that
+	// differ between Commit and HEAD, like HardReset. However, if a file that
+	// differs between Commit and HEAD has local modifications (staged or
+	// unstaged), the reset is aborted. Untracked files are never deleted.
+	// Equivalent to git reset --keep.
+	KeepReset
 )
 
 // ResetOptions describes how a reset operation should be performed.
@@ -421,7 +450,7 @@ type ResetOptions struct {
 	// the index (resetting it to the tree of Commit) and the working tree
 	// depending on Mode. If empty MixedReset is used.
 	Mode ResetMode
-	// Files, if not empty will constrain the reseting the index to only files
+	// Files, if not empty will constrain the resetting the index to only files
 	// specified in this list.
 	Files []string
 
@@ -452,9 +481,12 @@ func (o *ResetOptions) Validate(r *Repository) error {
 	return nil
 }
 
+// LogOrder represents the order in which commits are traversed during log operations.
 type LogOrder int8
 
+// Log traversal order options.
 const (
+	// LogOrderDefault uses depth-first search.
 	LogOrderDefault LogOrder = iota
 	LogOrderDFS
 	LogOrderDFSPost
@@ -504,6 +536,7 @@ type LogOptions struct {
 	Until *time.Time
 }
 
+// ErrMissingAuthor is returned when the author field is required but not provided.
 var ErrMissingAuthor = errors.New("author field is required")
 
 // AddOptions describes how an `add` operation should be performed
@@ -527,7 +560,7 @@ type AddOptions struct {
 }
 
 // Validate validates the fields and sets the default values.
-func (o *AddOptions) Validate(r *Repository) error {
+func (o *AddOptions) Validate(_ *Repository) error {
 	if o.Path != "" && o.Glob != "" {
 		return fmt.Errorf("fields Path and Glob are mutual exclusive")
 	}
@@ -553,13 +586,8 @@ type CommitOptions struct {
 	// Parents are the parents commits for the new commit, by default when
 	// len(Parents) is zero, the hash of HEAD reference is used.
 	Parents []plumbing.Hash
-	// SignKey denotes a key to sign the commit with. A nil value here means the
-	// commit will not be signed. The private key must be present and already
-	// decrypted.
-	SignKey *openpgp.Entity
 	// Signer denotes a cryptographic signer to sign the commit with.
 	// A nil value here means the commit will not be signed.
-	// Takes precedence over SignKey.
 	Signer Signer
 	// Amend will create a new commit object and replace the commit that HEAD currently
 	// points to. Cannot be used with All nor Parents.
@@ -588,7 +616,7 @@ func (o *CommitOptions) Validate(r *Repository) error {
 
 	if len(o.Parents) == 0 {
 		head, err := r.Head()
-		if err != nil && err != plumbing.ErrReferenceNotFound {
+		if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 			return err
 		}
 
@@ -637,6 +665,7 @@ func (o *CommitOptions) loadConfigAuthorAndCommitter(r *Repository) error {
 	return nil
 }
 
+// Tag creation errors.
 var (
 	ErrMissingName    = errors.New("name field is required")
 	ErrMissingTagger  = errors.New("tagger field is required")
@@ -652,13 +681,13 @@ type CreateTagOptions struct {
 	// validation into the format expected by git - no leading whitespace and
 	// ending in a newline.
 	Message string
-	// SignKey denotes a key to sign the tag with. A nil value here means the tag
-	// will not be signed. The private key must be present and already decrypted.
-	SignKey *openpgp.Entity
+	// Signer denotes a cryptographic signer to sign the tag with.
+	// A nil value here means the tag will not be signed.
+	Signer Signer
 }
 
 // Validate validates the fields and sets the default values.
-func (o *CreateTagOptions) Validate(r *Repository, hash plumbing.Hash) error {
+func (o *CreateTagOptions) Validate(r *Repository, _ plumbing.Hash) error {
 	if o.Tagger == nil {
 		if err := o.loadConfigTagger(r); err != nil {
 			return err
@@ -706,17 +735,11 @@ func (o *CreateTagOptions) loadConfigTagger(r *Repository) error {
 
 // ListOptions describes how a remote list should be performed.
 type ListOptions struct {
-	// Auth credentials, if required, to use with the remote repository.
-	Auth transport.AuthMethod
-	// InsecureSkipTLS skips ssl verify if protocol is https
-	InsecureSkipTLS bool
-	// CABundle specify additional ca bundle with system cert pool
-	CABundle []byte
+	// ClientOptions configures the transport client used for this operation.
+	ClientOptions []client.Option
 	// PeelingOption defines how peeled objects are handled during a
 	// remote list.
 	PeelingOption PeelingOption
-	// ProxyOptions provides info required for connecting to a proxy.
-	ProxyOptions transport.ProxyOptions
 	// Timeout specifies the timeout in seconds for list operations
 	Timeout int
 }
@@ -756,6 +779,7 @@ type GrepOptions struct {
 	PathSpecs []*regexp.Regexp
 }
 
+// ErrHashOrReference is returned when both CommitHash and ReferenceName are specified.
 var ErrHashOrReference = errors.New("ambiguous options, only one of CommitHash or ReferenceName can be passed")
 
 // Validate validates the fields and sets the default values.
@@ -789,14 +813,12 @@ type PlainOpenOptions struct {
 	// DetectDotGit defines whether parent directories should be
 	// walked until a .git directory or file is found.
 	DetectDotGit bool
-	// Enable .git/commondir support (see https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt).
-	// NOTE: This option will only work with the filesystem storage.
-	EnableDotGitCommonDir bool
 }
 
 // Validate validates the fields and sets the default values.
 func (o *PlainOpenOptions) Validate() error { return nil }
 
+// ErrNoRestorePaths is returned when no paths are specified to restore.
 var ErrNoRestorePaths = errors.New("you must specify path(s) to restore")
 
 // RestoreOptions describes how a restore should be performed.

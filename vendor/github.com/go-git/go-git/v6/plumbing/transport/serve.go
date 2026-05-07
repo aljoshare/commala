@@ -7,22 +7,24 @@ import (
 	"io"
 
 	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/format/config"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/protocol/capability"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
-	"github.com/go-git/go-git/v6/plumbing/protocol/packp/capability"
 	"github.com/go-git/go-git/v6/plumbing/storer"
 	"github.com/go-git/go-git/v6/storage"
 )
 
+// ErrUpdateReference is returned when a reference update fails.
 var ErrUpdateReference = errors.New("failed to update ref")
 
-// AdvertiseReferences is a server command that implements the reference
+// AdvertiseRefs is a server command that implements the reference
 // discovery phase of the Git transfer protocol.
-func AdvertiseReferences(
-	ctx context.Context,
+func AdvertiseRefs(
+	_ context.Context,
 	st storage.Storer,
 	w io.Writer,
-	service Service,
+	service string,
 	smart bool,
 ) error {
 	switch service {
@@ -32,30 +34,40 @@ func AdvertiseReferences(
 	}
 
 	forPush := service == ReceivePackService
-	ar := packp.NewAdvRefs()
+	ar := &packp.AdvRefs{}
 
 	// Set server default capabilities
-	ar.Capabilities.Set(capability.Agent, capability.DefaultAgent()) //nolint:errcheck
-	ar.Capabilities.Set(capability.OFSDelta)                         //nolint:errcheck
-	ar.Capabilities.Set(capability.Sideband64k)                      //nolint:errcheck
+	ar.Capabilities.Set(capability.Agent, capability.DefaultAgent())
+	ar.Capabilities.Set(capability.OFSDelta)
+	ar.Capabilities.Set(capability.Sideband64k)
 	if forPush {
 		// TODO: support thin-pack
-		ar.Capabilities.Set(capability.NoThin) //nolint:errcheck
+		ar.Capabilities.Set(capability.NoThin)
 		// TODO: support atomic
-		ar.Capabilities.Set(capability.DeleteRefs)   //nolint:errcheck
-		ar.Capabilities.Set(capability.ReportStatus) //nolint:errcheck
-		ar.Capabilities.Set(capability.PushOptions)  //nolint:errcheck
-		ar.Capabilities.Set(capability.Quiet)        //nolint:errcheck
+		ar.Capabilities.Set(capability.DeleteRefs)
+		ar.Capabilities.Set(capability.ReportStatus)
+		ar.Capabilities.Set(capability.PushOptions)
+		ar.Capabilities.Set(capability.Quiet)
 	} else {
 		// TODO: support include-tag
 		// TODO: support deepen
 		// TODO: support deepen-since
-		ar.Capabilities.Set(capability.MultiACK)         //nolint:errcheck
-		ar.Capabilities.Set(capability.MultiACKDetailed) //nolint:errcheck
-		ar.Capabilities.Set(capability.Sideband)         //nolint:errcheck
-		ar.Capabilities.Set(capability.NoProgress)       //nolint:errcheck
-		ar.Capabilities.Set(capability.SymRef)           //nolint:errcheck
-		ar.Capabilities.Set(capability.Shallow)          //nolint:errcheck
+		ar.Capabilities.Set(capability.MultiACK)
+		ar.Capabilities.Set(capability.MultiACKDetailed)
+		ar.Capabilities.Set(capability.Sideband)
+		ar.Capabilities.Set(capability.NoProgress)
+		ar.Capabilities.Set(capability.Shallow)
+
+		cfg, err := st.Config()
+		var objectformat config.ObjectFormat
+		if err == nil && cfg != nil {
+			objectformat = cfg.Extensions.ObjectFormat
+		}
+
+		if objectformat == config.UnsetObjectFormat {
+			objectformat = config.DefaultObjectFormat
+		}
+		ar.Capabilities.Set(capability.ObjectFormat, objectformat.String())
 	}
 
 	// Set references
@@ -63,9 +75,14 @@ func AdvertiseReferences(
 		return err
 	}
 
+	// Validate capabilities before sending the response.
+	if err := capability.Validate(&ar.Capabilities); err != nil {
+		return fmt.Errorf("invalid capabilities: %w", err)
+	}
+
 	if smart {
 		smartReply := packp.SmartReply{
-			Service: service.String(),
+			Service: service,
 		}
 
 		if err := smartReply.Encode(w); err != nil {
@@ -83,10 +100,9 @@ func addReferences(st storage.Storer, ar *packp.AdvRefs, addHead bool) error {
 	}
 
 	// Add references and their peeled values
-	if err := iter.ForEach(func(r *plumbing.Reference) error {
+	return iter.ForEach(func(r *plumbing.Reference) error {
 		hash, name := r.Hash(), r.Name()
-		switch r.Type() {
-		case plumbing.SymbolicReference:
+		if r.Type() == plumbing.SymbolicReference {
 			ref, err := storer.ResolveReference(st, r.Target())
 			if errors.Is(err, plumbing.ErrReferenceNotFound) {
 				return nil
@@ -100,20 +116,24 @@ func addReferences(st storage.Storer, ar *packp.AdvRefs, addHead bool) error {
 			if !addHead {
 				return nil
 			}
-			// Add default branch HEAD symref
-			ar.Capabilities.Add(capability.SymRef, fmt.Sprintf("%s:%s", name, r.Target())) //nolint:errcheck
-			ar.Head = &hash
+			// Only advertise a symref when HEAD is symbolic. A detached HEAD
+			// (HashReference) has no branch target to advertise; emitting
+			// "HEAD:" with an empty target corrupts the capability list and
+			// causes the client to store an unresolvable HEAD symref.
+			if r.Type() == plumbing.SymbolicReference {
+				ar.Capabilities.Add(capability.SymRef, fmt.Sprintf("%s:%s", name, r.Target()))
+			}
+			ar.References = append([]*plumbing.Reference{plumbing.NewHashReference(name, hash)}, ar.References...)
+			return nil
 		}
-		ar.References[name.String()] = hash
+		ar.References = append(ar.References, plumbing.NewHashReference(name, hash))
 		if r.Name().IsTag() {
 			if tag, err := object.GetTag(st, hash); err == nil {
-				ar.Peeled[name.String()] = tag.Target
+				ar.References = append(ar.References, plumbing.NewHashReference(
+					plumbing.ReferenceName(name.String()+"^{}"), tag.Target,
+				))
 			}
 		}
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }

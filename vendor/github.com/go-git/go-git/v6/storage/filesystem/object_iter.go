@@ -1,13 +1,16 @@
 package filesystem
 
 import (
+	"crypto"
 	"io"
 
 	"github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/cache"
 	"github.com/go-git/go-git/v6/plumbing/format/idxfile"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
+	"github.com/go-git/go-git/v6/plumbing/hash"
 	"github.com/go-git/go-git/v6/plumbing/storer"
 )
 
@@ -40,6 +43,8 @@ func (it *lazyPackfilesIter) Next() (plumbing.EncodedObject, error) {
 			it.cur = nil
 			continue
 		} else if err != nil {
+			it.cur.Close()
+			it.cur = nil
 			return nil, err
 		}
 		return ob, nil
@@ -77,11 +82,18 @@ func NewPackfileIter(
 	idxFile billy.File,
 	t plumbing.ObjectType,
 	keepPack bool,
-	largeObjectThreshold int64,
+	_ int64, // largeObjectThreshold - currently unused
 	objectIDSize int,
 ) (storer.EncodedObjectIter, error) {
+	var hasher hash.Hash
+	if objectIDSize == crypto.SHA256.Size() {
+		hasher = hash.New(crypto.SHA256)
+	} else {
+		hasher = hash.New(crypto.SHA1)
+	}
+
 	idx := idxfile.NewMemoryIndex(objectIDSize)
-	if err := idxfile.NewDecoder(idxFile).Decode(idx); err != nil {
+	if err := idxfile.NewDecoder(idxFile, hasher).Decode(idx); err != nil {
 		return nil, err
 	}
 
@@ -112,6 +124,9 @@ func newPackfileIter(
 
 	iter, err := p.GetByType(t)
 	if err != nil {
+		if !keepPack {
+			_ = f.Close()
+		}
 		return nil, err
 	}
 
@@ -134,16 +149,17 @@ func (iter *packfileIter) Next() (plumbing.EncodedObject, error) {
 			continue
 		}
 
+		iter.seen[obj.Hash()] = struct{}{}
 		return obj, nil
 	}
 }
 
 func (iter *packfileIter) ForEach(cb func(plumbing.EncodedObject) error) error {
+	defer iter.Close()
 	for {
 		o, err := iter.Next()
 		if err != nil {
 			if err == io.EOF {
-				iter.Close()
 				return nil
 			}
 			return err
@@ -188,6 +204,7 @@ func (iter *objectsIter) Next() (plumbing.EncodedObject, error) {
 }
 
 func (iter *objectsIter) ForEach(cb func(plumbing.EncodedObject) error) error {
+	defer iter.Close()
 	for {
 		o, err := iter.Next()
 		if err != nil {
