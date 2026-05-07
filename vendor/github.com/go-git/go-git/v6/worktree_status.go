@@ -3,23 +3,29 @@ package git
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-billy/v6/util"
+
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	"github.com/go-git/go-git/v6/plumbing/format/index"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/utils/convert"
 	"github.com/go-git/go-git/v6/utils/ioutil"
 	"github.com/go-git/go-git/v6/utils/merkletrie"
 	"github.com/go-git/go-git/v6/utils/merkletrie/filesystem"
 	mindex "github.com/go-git/go-git/v6/utils/merkletrie/index"
 	"github.com/go-git/go-git/v6/utils/merkletrie/noder"
+	"github.com/go-git/go-git/v6/utils/sync"
+	"github.com/go-git/go-git/v6/utils/trace"
 )
 
 var (
@@ -49,7 +55,7 @@ func (w *Worktree) StatusWithOptions(o StatusOptions) (Status, error) {
 	var hash plumbing.Hash
 
 	ref, err := w.r.Head()
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return nil, err
 	}
 
@@ -135,67 +141,51 @@ func (w *Worktree) diffStagingWithWorktree(reverse, excludeIgnoredChanges bool) 
 		return nil, err
 	}
 
-	from := mindex.NewRootNode(idx)
+	cfg, err := w.r.Config()
+	if err != nil {
+		return nil, err
+	}
+
+	from := mindex.NewRootNodeWithOptions(idx, mindex.RootNodeOptions{
+		UpholdExecutableBit: cfg.Core.FileMode,
+	})
 	submodules, err := w.getSubmodulesStatus()
 	if err != nil {
 		return nil, err
 	}
 
-	to := filesystem.NewRootNode(w.Filesystem, submodules)
-
-	var c merkletrie.Changes
-	if reverse {
-		c, err = merkletrie.DiffTree(to, from, diffTreeIsEquals)
-	} else {
-		c, err = merkletrie.DiffTree(from, to, diffTreeIsEquals)
+	fsOpts := filesystem.Options{
+		AutoCRLF: cfg.Core.AutoCRLF == "true" || cfg.Core.AutoCRLF == "input",
+		Index:    idx,
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
+	// When ignored changes are to be filtered out, gather the gitignore
+	// patterns once, build a matcher, and let the filesystem noder skip
+	// ignored, untracked entries during the walk. This avoids descending
+	// into large gitignored directories like node_modules and makes a
+	// post-walk filter unnecessary: tracked entries are still walked even
+	// when their parent matches an ignore rule, so modifications to them
+	// are still reported.
 	if excludeIgnoredChanges {
-		return w.excludeIgnoredChanges(c), nil
+		if patterns := w.collectIgnorePatterns(); len(patterns) > 0 {
+			fsOpts.IgnoreMatcher = gitignore.NewMatcher(patterns)
+		}
 	}
-	return c, nil
+
+	to := filesystem.NewRootNodeWithOptions(w.Filesystem, submodules, fsOpts)
+
+	if reverse {
+		return merkletrie.DiffTree(to, from, diffTreeIsEquals)
+	}
+	return merkletrie.DiffTree(from, to, diffTreeIsEquals)
 }
 
-func (w *Worktree) excludeIgnoredChanges(changes merkletrie.Changes) merkletrie.Changes {
+func (w *Worktree) collectIgnorePatterns() []gitignore.Pattern {
 	patterns, err := gitignore.ReadPatterns(w.Filesystem, nil)
 	if err != nil {
-		return changes
+		patterns = nil
 	}
-
-	patterns = append(patterns, w.Excludes...)
-
-	if len(patterns) == 0 {
-		return changes
-	}
-
-	m := gitignore.NewMatcher(patterns)
-
-	var res merkletrie.Changes
-	for _, ch := range changes {
-		var path []string
-		for _, n := range ch.To {
-			path = append(path, n.Name())
-		}
-		if len(path) == 0 {
-			for _, n := range ch.From {
-				path = append(path, n.Name())
-			}
-		}
-		if len(path) != 0 {
-			isDir := (len(ch.To) > 0 && ch.To.IsDir()) || (len(ch.From) > 0 && ch.From.IsDir())
-			if m.Match(path, isDir) {
-				if len(ch.From) == 0 {
-					continue
-				}
-			}
-		}
-		res = append(res, ch)
-	}
-	return res
+	return append(patterns, w.Excludes...)
 }
 
 func (w *Worktree) getSubmodulesStatus() (map[string]plumbing.Hash, error) {
@@ -260,6 +250,19 @@ func (w *Worktree) diffTreeWithStaging(t *object.Tree, reverse bool) (merkletrie
 	return merkletrie.DiffTree(from, to, diffTreeIsEquals)
 }
 
+// diffTrees returns the changes between two tree objects.
+// Either tree may be nil, which is treated as the empty tree.
+func diffTrees(from, to *object.Tree) (merkletrie.Changes, error) {
+	var fromNode, toNode noder.Noder
+	if from != nil {
+		fromNode = object.NewTreeRootNode(from)
+	}
+	if to != nil {
+		toNode = object.NewTreeRootNode(to)
+	}
+	return merkletrie.DiffTree(fromNode, toNode, diffTreeIsEquals)
+}
+
 var emptyNoderHash = make([]byte, 24)
 
 // diffTreeIsEquals is a implementation of noder.Equals, used to compare
@@ -310,13 +313,13 @@ func (w *Worktree) doAddDirectory(idx *index.Index, s Status, directory string, 
 		var a bool
 		a, _, err = w.doAddFile(idx, s, name, ignorePattern)
 		if err != nil {
-			return
+			return added, err
 		}
 
 		added = added || a
 	}
 
-	return
+	return added, err
 }
 
 func isPathInDirectory(path, directory string) bool {
@@ -350,6 +353,13 @@ func (w *Worktree) AddWithOptions(opts *AddOptions) error {
 }
 
 func (w *Worktree) doAdd(path string, ignorePattern []gitignore.Pattern, skipStatus bool) (plumbing.Hash, error) {
+	if trace.Performance.Enabled() {
+		start := time.Now()
+		defer func() {
+			trace.Performance.Printf("performance: %.9f s: git command: git add %s", time.Since(start).Seconds(), path)
+		}()
+	}
+
 	idx, err := w.r.Storer.Index()
 	if err != nil {
 		return plumbing.ZeroHash, err
@@ -371,6 +381,17 @@ func (w *Worktree) doAdd(path string, ignorePattern []gitignore.Pattern, skipSta
 	}
 
 	path = filepath.Clean(path)
+	if filepath.IsAbs(path) {
+		root := w.Filesystem.Root()
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return plumbing.ZeroHash, fmt.Errorf("path %q is not inside the worktree root %q: %w", path, root, err)
+		}
+		if relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+			return plumbing.ZeroHash, fmt.Errorf("path %q is outside the worktree root %q", path, root)
+		}
+		path = relPath
+	}
 
 	if err != nil || !fi.IsDir() {
 		added, h, err = w.doAddFile(idx, s, path, ignorePattern)
@@ -393,6 +414,13 @@ func (w *Worktree) doAdd(path string, ignorePattern []gitignore.Pattern, skipSta
 // directory path, all directory contents are added to the index recursively. No
 // error is returned if all matching paths are already staged in index.
 func (w *Worktree) AddGlob(pattern string) error {
+	if trace.Performance.Enabled() {
+		start := time.Now()
+		defer func() {
+			trace.Performance.Printf("performance: %.9f s: add glob %s", time.Since(start).Seconds(), pattern)
+		}()
+	}
+
 	// TODO(mcuadros): deprecate in favor of AddWithOption in v6.
 	files, err := util.Glob(w.Filesystem, pattern)
 	if err != nil {
@@ -466,7 +494,7 @@ func (w *Worktree) doAddFile(idx *index.Index, s Status, path string, ignorePatt
 			h, err = w.deleteFromIndex(idx, path)
 		}
 
-		return
+		return added, h, err
 	}
 
 	if err := w.addOrUpdateFileToIndex(idx, path, h); err != nil {
@@ -507,17 +535,37 @@ func (w *Worktree) copyFileToStorage(path string) (hash plumbing.Hash, err error
 }
 
 func (w *Worktree) fillEncodedObjectFromFile(dst io.Writer, path string, _ os.FileInfo) (err error) {
-	src, err := w.Filesystem.Open(path)
+	file, err := w.Filesystem.Open(path)
+	if err != nil {
+		return err
+	}
+	defer ioutil.CheckClose(file, &err)
+
+	cfg, err := w.r.Config()
 	if err != nil {
 		return err
 	}
 
-	defer ioutil.CheckClose(src, &err)
+	switch cfg.Core.AutoCRLF {
+	case "true", "input":
+		br := sync.GetBufioReader(file)
+		defer sync.PutBufioReader(br)
 
-	if _, err := ioutil.CopyBufferPool(dst, src); err != nil {
-		return err
+		stat, err := convert.GetStat(br)
+		if err != nil {
+			return err
+		}
+
+		if _, err = file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+
+		if !stat.IsBinary() {
+			dst = convert.NewLFWriter(dst)
+		}
 	}
 
+	_, err = ioutil.CopyBufferPool(dst, file)
 	return err
 }
 
@@ -533,11 +581,11 @@ func (w *Worktree) fillEncodedObjectFromSymlink(dst io.Writer, path string, _ os
 
 func (w *Worktree) addOrUpdateFileToIndex(idx *index.Index, filename string, h plumbing.Hash) error {
 	e, err := idx.Entry(filename)
-	if err != nil && err != index.ErrEntryNotFound {
+	if err != nil && !errors.Is(err, index.ErrEntryNotFound) {
 		return err
 	}
 
-	if err == index.ErrEntryNotFound {
+	if errors.Is(err, index.ErrEntryNotFound) {
 		return w.doAddFileToIndex(idx, filename, h)
 	}
 
@@ -608,13 +656,13 @@ func (w *Worktree) doRemoveDirectory(idx *index.Index, directory string) (remove
 			r, err = w.doRemoveDirectory(idx, name)
 		} else {
 			_, err = w.doRemoveFile(idx, name)
-			if err == index.ErrEntryNotFound {
+			if errors.Is(err, index.ErrEntryNotFound) {
 				err = nil
 			}
 		}
 
 		if err != nil {
-			return
+			return removed, err
 		}
 
 		if !removed && r {
@@ -623,7 +671,7 @@ func (w *Worktree) doRemoveDirectory(idx *index.Index, directory string) (remove
 	}
 
 	err = w.removeEmptyDirectory(directory)
-	return
+	return removed, err
 }
 
 func (w *Worktree) removeEmptyDirectory(path string) error {

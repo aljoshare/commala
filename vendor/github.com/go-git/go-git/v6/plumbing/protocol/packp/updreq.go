@@ -4,32 +4,26 @@ import (
 	"errors"
 
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v6/plumbing/protocol/capability"
 )
 
+// Errors returned by the updreq package.
 var (
 	ErrEmptyCommands    = errors.New("commands cannot be empty")
 	ErrMalformedCommand = errors.New("malformed command")
 )
 
 // UpdateRequests values represent reference upload requests.
-// Values from this type are not zero-value safe, use the New function instead.
+// The zero value is safe to use; Commands and Shallows can be populated
+// via append.
 type UpdateRequests struct {
-	Capabilities *capability.List
+	Capabilities capability.List
 	Commands     []*Command
-	Shallow      *plumbing.Hash
+	Shallows     []plumbing.Hash
 	// TODO: Support push-cert
 }
 
-// NewUpdateRequests returns a new UpdateRequests.
-func NewUpdateRequests() *UpdateRequests {
-	// TODO: Add support for push-cert
-	return &UpdateRequests{
-		Capabilities: capability.NewList(),
-	}
-}
-
-func (req *UpdateRequests) validate() error {
+func validateUpdateRequests(req *UpdateRequests) error {
 	if len(req.Commands) == 0 {
 		return ErrEmptyCommands
 	}
@@ -43,8 +37,10 @@ func (req *UpdateRequests) validate() error {
 	return nil
 }
 
+// Action represents the action type of a command.
 type Action string
 
+// Action types.
 const (
 	Create  Action = "create"
 	Update  Action = "update"
@@ -52,12 +48,14 @@ const (
 	Invalid Action = "invalid"
 )
 
+// Command represents a command to be executed on a reference.
 type Command struct {
 	Name plumbing.ReferenceName
 	Old  plumbing.Hash
 	New  plumbing.Hash
 }
 
+// Action returns the action type of the command.
 func (c *Command) Action() Action {
 	if c.Old == plumbing.ZeroHash && c.New == plumbing.ZeroHash {
 		return Invalid
