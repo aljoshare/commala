@@ -44,11 +44,13 @@ func (s *storage) New(path string, mode fs.FileMode, flag int) (*file, error) {
 
 	name := filepath.Base(path)
 	f := &file{
-		name:    name,
-		content: &content{name: name},
-		mode:    mode,
-		flag:    flag,
-		modTime: time.Now(),
+		name: name,
+		content: &content{
+			name:    name,
+			modTime: time.Now(),
+		},
+		mode: mode,
+		flag: flag,
 	}
 
 	s.mf.Lock()
@@ -139,7 +141,7 @@ func (s *storage) Rename(from, to string) error {
 	move := [][2]string{{from, to}}
 	s.mf.RLock()
 	for pathFrom := range s.files {
-		if pathFrom == from || !strings.HasPrefix(pathFrom, from) {
+		if pathFrom == from || !isPathDescendant(pathFrom, from) {
 			continue
 		}
 
@@ -160,6 +162,10 @@ func (s *storage) Rename(from, to string) error {
 	}
 
 	return nil
+}
+
+func isPathDescendant(path, parent string) bool {
+	return strings.HasPrefix(path, parent+string(filepath.Separator))
 }
 
 func (s *storage) move(from, to string) error {
@@ -184,7 +190,7 @@ func (s *storage) move(from, to string) error {
 		s.mc.Unlock()
 	}()
 
-	return s.createParent(to, 0644, file)
+	return s.createParent(to, 0o644, file)
 }
 
 func (s *storage) Remove(path string) error {
@@ -217,6 +223,18 @@ func (s *storage) Remove(path string) error {
 	s.mc.Lock()
 	delete(s.children[base], file)
 	s.mc.Unlock()
+	return nil
+}
+
+func (s *storage) Chmod(path string, mode fs.FileMode) error {
+	path = clean(path)
+
+	f, has := s.Get(path)
+	if !has {
+		return os.ErrNotExist
+	}
+
+	f.mode = mode
 	return nil
 }
 
