@@ -1,14 +1,18 @@
 package packfile
 
 import (
+	"bufio"
 	"errors"
 	"io"
+	"math"
 	"os"
 
 	billy "github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/cache"
 	"github.com/go-git/go-git/v6/plumbing/format/idxfile"
+	"github.com/go-git/go-git/v6/utils/ioutil"
 	"github.com/go-git/go-git/v6/utils/sync"
 )
 
@@ -51,6 +55,10 @@ func NewFSObject(
 }
 
 // Reader implements the plumbing.EncodedObject interface.
+//
+// Reader is safe for concurrent use: it uses ReadAt (which does not modify the
+// file's seek cursor) instead of Seek+Read, so multiple goroutines can call
+// Reader on FSObjects that share the same underlying packfile handle.
 func (o *FSObject) Reader() (io.ReadCloser, error) {
 	obj, ok := o.cache.Get(o.hash)
 	if ok && obj != o {
@@ -62,54 +70,70 @@ func (o *FSObject) Reader() (io.ReadCloser, error) {
 		return reader, nil
 	}
 
-	var closer io.Closer
-	_, err := o.pack.Seek(o.offset, io.SeekStart)
-	// fsobject aims to reuse an existing file descriptor to the packfile.
-	// In some cases that descriptor would already be closed, in such cases,
-	// open the packfile again and close it when the reader is closed.
+	pack := o.pack
+	var file io.Closer
+
+	// Probe with a 1-byte ReadAt to detect a closed file descriptor without
+	// modifying any shared state. A zero-length read cannot be used because
+	// some implementations (e.g. os.File) return (0, nil) for empty reads
+	// even on closed files.
+	_, err := pack.ReadAt(make([]byte, 1), o.offset)
 	if err != nil && errors.Is(err, os.ErrClosed) {
-		o.pack, err = o.fs.Open(o.packPath)
+		pack, err = o.fs.Open(o.packPath)
 		if err != nil {
 			return nil, err
 		}
-		closer = o.pack
-		_, err = o.pack.Seek(o.offset, io.SeekStart)
-	}
-	if err != nil {
+		file = pack
+	} else if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 
-	dict := sync.GetByteSlice()
-	zr := sync.NewZlibReader(dict)
-	err = zr.Reset(o.pack)
+	// SectionReader provides a standalone io.Reader backed by ReadAt. Each
+	// SectionReader maintains its own read position, so concurrent calls
+	// to Reader do not interfere with each other or with the packfile's
+	// Scanner. The upper bound is set to math.MaxInt64 because zlib
+	// streams are self-terminating — the decompressor stops at the DEFLATE
+	// end marker regardless of how many bytes remain available.
+	sr := io.NewSectionReader(pack, o.offset, math.MaxInt64-o.offset)
+	br := sync.GetBufioReader(sr)
+
+	zr, err := sync.GetZlibReader(br)
 	if err != nil {
+		sync.PutBufioReader(br)
+		if file != nil {
+			_ = file.Close()
+		}
 		return nil, err
 	}
-	return &zlibReadCloser{zr, dict, closer, false}, nil
+	return NewBoundedReadCloser(&zlibReadCloser{r: zr, f: file, rbuf: br}, o.size), nil
 }
 
 type zlibReadCloser struct {
-	r      sync.ZLibReader
-	dict   *[]byte
+	r      *sync.ZLibReader
 	f      io.Closer
+	rbuf   *bufio.Reader
 	closed bool
 }
 
 // Read reads up to len(p) bytes into p from the data.
 func (r *zlibReadCloser) Read(p []byte) (int, error) {
-	return r.r.Reader.Read(p)
+	return r.r.Read(p)
 }
 
-func (r *zlibReadCloser) Close() error {
+func (r *zlibReadCloser) Close() (err error) {
 	if r.closed {
 		return nil
 	}
 	r.closed = true
-	sync.PutZlibReader(r.r)
+
 	if r.f != nil {
-		r.f.Close()
+		defer ioutil.CheckClose(r.f, &err)
 	}
-	return nil
+
+	defer sync.PutBufioReader(r.rbuf)
+
+	defer sync.PutZlibReader(r.r)
+	return r.r.Close()
 }
 
 // SetSize implements the plumbing.EncodedObject interface. This method

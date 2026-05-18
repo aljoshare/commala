@@ -2,11 +2,13 @@ package packfile
 
 import (
 	billy "github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/plumbing/cache"
 	"github.com/go-git/go-git/v6/plumbing/format/idxfile"
 )
 
-type PackfileOption func(*Packfile)
+// PackfileOption configures a Packfile.
+type PackfileOption func(*Packfile) //nolint:revive // stutters but is a well-established name
 
 // WithCache sets the cache to be used throughout Packfile operations.
 // Use this to share existing caches with the Packfile. If not used, a
@@ -37,6 +39,6 @@ func WithFs(fs billy.Filesystem) PackfileOption {
 // When no object ID size is set, hash.SHA1Size will be used.
 func WithObjectIDSize(sz int) PackfileOption {
 	return func(p *Packfile) {
-		p.objectIdSize = sz
+		p.objectIDSize = sz
 	}
 }

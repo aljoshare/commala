@@ -1,11 +1,12 @@
 package packfile
 
 import (
+	"bufio"
 	"bytes"
 	"crypto"
 	"encoding/hex"
+	"errors"
 	"fmt"
-
 	"hash"
 	"hash/crc32"
 	"io"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-git/go-git/v6/plumbing"
 	format "github.com/go-git/go-git/v6/plumbing/format/config"
+	packutil "github.com/go-git/go-git/v6/plumbing/format/packfile/util"
 	gogithash "github.com/go-git/go-git/v6/plumbing/hash"
 	"github.com/go-git/go-git/v6/plumbing/storer"
 	"github.com/go-git/go-git/v6/utils/binary"
@@ -24,7 +26,7 @@ var (
 	// ErrEmptyPackfile is returned by ReadHeader when no data is found in the packfile.
 	ErrEmptyPackfile = NewError("empty packfile")
 	// ErrBadSignature is returned by ReadHeader when the signature in the packfile is incorrect.
-	ErrBadSignature = NewError("malformed pack file signature")
+	ErrBadSignature = NewError("bad signature")
 	// ErrMalformedPackfile is returned when the packfile format is incorrect.
 	ErrMalformedPackfile = NewError("malformed pack file")
 	// ErrUnsupportedVersion is returned by ReadHeader when the packfile version is
@@ -32,7 +34,96 @@ var (
 	ErrUnsupportedVersion = NewError("unsupported packfile version")
 	// ErrSeekNotSupported returned if seek is not support.
 	ErrSeekNotSupported = NewError("not seek support")
+	// ErrInflatedSizeMismatch is returned when a packfile object inflates to
+	// more bytes than the size declared in its object header. A well-formed
+	// packfile never produces more data than the declared size; exceeding it
+	// indicates a structurally invalid entry.
+	ErrInflatedSizeMismatch = errors.New("packfile: inflated object exceeds declared size")
 )
+
+// boundedWriter passes writes through to w up to limit bytes total, then
+// returns ErrInflatedSizeMismatch. It is used to enforce that a packfile
+// object's inflated length does not exceed the size declared in its header.
+type boundedWriter struct {
+	w     io.Writer
+	limit int64
+	n     int64
+}
+
+// Write forwards p to the underlying writer while keeping the running total
+// at or below limit. On overrun it forwards the legal prefix and reports
+// the number of bytes actually consumed alongside ErrInflatedSizeMismatch,
+// matching the contract in io.Writer. A write error from the underlying
+// writer during overrun-handling is joined with ErrInflatedSizeMismatch so
+// it is not silently dropped.
+func (b *boundedWriter) Write(p []byte) (int, error) {
+	if b.n+int64(len(p)) > b.limit {
+		remain := int(b.limit - b.n)
+		err := error(ErrInflatedSizeMismatch)
+		if remain > 0 {
+			n, werr := b.w.Write(p[:remain])
+			b.n += int64(n)
+			if werr != nil {
+				err = errors.Join(ErrInflatedSizeMismatch, werr)
+			}
+			return n, err
+		}
+		return 0, err
+	}
+	n, err := b.w.Write(p)
+	b.n += int64(n)
+	return n, err
+}
+
+// BoundedReadCloser wraps a ReadCloser and reports ErrInflatedSizeMismatch
+// once more than limit bytes have been read. It is used by the on-demand
+// object readers to enforce the same bound that the scanner applies during
+// a forward scan, so a lazy Read of a packfile object cannot stream past
+// its declared inflated size.
+//
+// The implementation builds on io.LimitedReader with the standard
+// overrun-detection trick: request limit+1 bytes from the underlying so
+// that the moment the sentinel byte materializes (LimitedReader.N drops
+// to zero) we know the source produced more than limit bytes.
+type BoundedReadCloser struct {
+	lr      io.LimitedReader
+	closer  io.Closer
+	overrun bool
+}
+
+// NewBoundedReadCloser wraps rc so that the cumulative bytes returned from
+// Read never exceed limit. The first call that would have returned a byte
+// past limit instead returns ErrInflatedSizeMismatch; subsequent calls
+// keep returning the same error. A negative limit is treated as zero, so
+// the first byte produced by rc surfaces ErrInflatedSizeMismatch.
+func NewBoundedReadCloser(rc io.ReadCloser, limit int64) *BoundedReadCloser {
+	if limit < 0 {
+		limit = 0
+	}
+	return &BoundedReadCloser{
+		lr:     io.LimitedReader{R: rc, N: limit + 1},
+		closer: rc,
+	}
+}
+
+// Read forwards Read up to the configured byte limit. When the underlying
+// stream produces the limit+1 sentinel byte, the legal prefix is returned
+// alongside ErrInflatedSizeMismatch; on subsequent calls only the error
+// is returned.
+func (b *BoundedReadCloser) Read(p []byte) (int, error) {
+	if b.overrun {
+		return 0, ErrInflatedSizeMismatch
+	}
+	n, err := b.lr.Read(p)
+	if b.lr.N == 0 {
+		b.overrun = true
+		return n - 1, ErrInflatedSizeMismatch
+	}
+	return n, err
+}
+
+// Close closes the underlying ReadCloser.
+func (b *BoundedReadCloser) Close() error { return b.closer.Close() }
 
 // Scanner provides sequential access to the data stored in a Git packfile.
 //
@@ -64,14 +155,12 @@ var (
 type Scanner struct {
 	// version holds the packfile version.
 	version Version
-	// objects holds the quantiy of objects within the packfile.
+	// objects holds the quantity of objects within the packfile.
 	objects uint32
 	// objIndex is the current index when going through the packfile objects.
 	objIndex int
 	// hasher is used to hash non-delta objects.
 	hasher plumbing.Hasher
-	// hasher256 is optional and used to hash the non-delta objects using SHA256.
-	hasher256 *plumbing.Hasher
 	// crc is used to generate the CRC-32 checksum of each object's content.
 	crc hash.Hash32
 	// packhash hashes the pack contents so that at the end it is able to
@@ -95,31 +184,31 @@ type Scanner struct {
 	storage storer.EncodedObjectStorer
 
 	*scannerReader
-	zr            gogitsync.ZLibReader
+	rbuf *bufio.Reader
+
 	lowMemoryMode bool
 }
 
 // NewScanner creates a new instance of Scanner.
 func NewScanner(rs io.Reader, opts ...ScannerOption) *Scanner {
-	dict := make([]byte, 16*1024)
 	crc := crc32.NewIEEE()
 	packhash := gogithash.New(crypto.SHA1)
 
 	r := &Scanner{
-		scannerReader: newScannerReader(rs, io.MultiWriter(crc, packhash)),
-		zr:            gogitsync.NewZlibReader(&dict),
-		objIndex:      -1,
-		hasher:        plumbing.NewHasher(format.SHA1, plumbing.AnyObject, 0),
-		crc:           crc,
-		packhash:      packhash,
-		nextFn:        packHeaderSignature,
-		// Set the default size, which can be overriden by opts.
+		objIndex: -1,
+		hasher:   plumbing.NewHasher(format.SHA1, plumbing.AnyObject, 0),
+		crc:      crc,
+		packhash: packhash,
+		nextFn:   packHeaderSignature,
+		// Set the default size, which can be overridden by opts.
 		objectIDSize: packhash.Size(),
 	}
 
 	for _, opt := range opts {
 		opt(r)
 	}
+
+	r.scannerReader = newScannerReader(rs, io.MultiWriter(crc, r.packhash), r.rbuf)
 
 	return r
 }
@@ -153,6 +242,10 @@ func (r *Scanner) Scan() bool {
 	}
 
 	if err := scan(r); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			err = fmt.Errorf("%w: %w", ErrMalformedPackfile, err)
+		}
+
 		r.err = err
 		return false
 	}
@@ -162,9 +255,13 @@ func (r *Scanner) Scan() bool {
 
 // Reset resets the current scanner, enabling it to be used to scan the
 // same Packfile again.
-func (r *Scanner) Reset() {
-	r.scannerReader.Flush()
-	r.scannerReader.Seek(0, io.SeekStart)
+func (r *Scanner) Reset() error {
+	if err := r.Flush(); err != nil {
+		return err
+	}
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
 	r.packhash.Reset()
 
 	r.objIndex = -1
@@ -173,6 +270,7 @@ func (r *Scanner) Reset() {
 	r.packData = PackData{}
 	r.err = nil
 	r.nextFn = packHeaderSignature
+	return nil
 }
 
 // Data returns the pack data based on the last call to Scan().
@@ -186,18 +284,22 @@ func (r *Scanner) Error() error {
 	return r.err
 }
 
+// SeekFromStart seeks to the given offset from the start of the packfile.
 func (r *Scanner) SeekFromStart(offset int64) error {
-	r.Reset()
+	if err := r.Reset(); err != nil {
+		return err
+	}
 
 	if !r.Scan() {
 		return fmt.Errorf("failed to reset and read header")
 	}
 
-	_, err := r.scannerReader.Seek(offset, io.SeekStart)
+	_, err := r.Seek(offset, io.SeekStart)
 	return err
 }
 
-func (s *Scanner) WriteObject(oh *ObjectHeader, writer io.Writer) error {
+// WriteObject writes the content of the given ObjectHeader to the provided writer.
+func (r *Scanner) WriteObject(oh *ObjectHeader, writer io.Writer) error {
 	if oh.content != nil && oh.content.Len() > 0 {
 		_, err := ioutil.CopyBufferPool(writer, oh.content)
 		return err
@@ -211,11 +313,11 @@ func (s *Scanner) WriteObject(oh *ObjectHeader, writer io.Writer) error {
 	}
 
 	// Not a seeker data source.
-	if s.seeker == nil {
+	if r.seeker == nil {
 		return plumbing.ErrObjectNotFound
 	}
 
-	err := s.inflateContent(oh.ContentOffset, writer)
+	err := r.inflateContent(oh.ContentOffset, writer, oh.Size)
 	if err != nil {
 		return ErrReferenceDeltaNotFound
 	}
@@ -223,23 +325,21 @@ func (s *Scanner) WriteObject(oh *ObjectHeader, writer io.Writer) error {
 	return nil
 }
 
-func (s *Scanner) inflateContent(contentOffset int64, writer io.Writer) error {
-	_, err := s.scannerReader.Seek(contentOffset, io.SeekStart)
+func (r *Scanner) inflateContent(contentOffset int64, writer io.Writer, declaredSize int64) error {
+	bounded := &boundedWriter{w: writer, limit: declaredSize}
+	_, err := r.Seek(contentOffset, io.SeekStart)
 	if err != nil {
 		return err
 	}
 
-	err = s.zr.Reset(s.scannerReader)
+	zr, err := gogitsync.GetZlibReader(r.scannerReader)
 	if err != nil {
-		return fmt.Errorf("zlib reset error: %s", err)
+		return fmt.Errorf("zlib reset error: %w", err)
 	}
+	defer gogitsync.PutZlibReader(zr)
 
-	_, err = ioutil.CopyBufferPool(writer, s.zr.Reader)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err = ioutil.CopyBufferPool(bounded, zr)
+	return err
 }
 
 // scan goes through the next stateFn.
@@ -269,16 +369,19 @@ type stateFn func(*Scanner) (stateFn, error)
 // that handles the entire packfile header.
 func packHeaderSignature(r *Scanner) (stateFn, error) {
 	start := make([]byte, 4)
-	_, err := r.Read(start)
+	n, err := r.Read(start)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrBadSignature, err)
+		if n == 0 && err == io.EOF {
+			return nil, ErrEmptyPackfile
+		}
+		return nil, fmt.Errorf("read signature: %w", err)
 	}
 
 	if bytes.Equal(start, signature) {
 		return packVersion, nil
 	}
 
-	return nil, ErrBadSignature
+	return nil, fmt.Errorf("%w: %w", ErrMalformedPackfile, ErrBadSignature)
 }
 
 // packVersion parses the packfile version. It returns [ErrMalformedPackfile]
@@ -287,7 +390,7 @@ func packHeaderSignature(r *Scanner) (stateFn, error) {
 func packVersion(r *Scanner) (stateFn, error) {
 	version, err := binary.ReadUint32(r.scannerReader)
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot read version", ErrMalformedPackfile)
+		return nil, fmt.Errorf("read version: %w", err)
 	}
 
 	v := Version(version)
@@ -306,7 +409,7 @@ func packVersion(r *Scanner) (stateFn, error) {
 func packObjectsQty(r *Scanner) (stateFn, error) {
 	qty, err := binary.ReadUint32(r.scannerReader)
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot read number of objects", ErrMalformedPackfile)
+		return nil, fmt.Errorf("read number of objects: %w", err)
 	}
 	if qty == 0 {
 		return packFooter, nil
@@ -335,9 +438,11 @@ func objectEntry(r *Scanner) (stateFn, error) {
 	}
 	r.objIndex++
 
-	offset := r.scannerReader.offset
+	offset := r.offset
 
-	r.scannerReader.Flush()
+	if err := r.Flush(); err != nil {
+		return nil, err
+	}
 	r.crc.Reset()
 
 	b := []byte{0}
@@ -346,13 +451,16 @@ func objectEntry(r *Scanner) (stateFn, error) {
 		return nil, err
 	}
 
-	typ := parseType(b[0])
+	typ := packutil.ObjectType(b[0])
 	if !typ.Valid() {
 		return nil, fmt.Errorf("%w: invalid object type: %v", ErrMalformedPackfile, b[0])
 	}
 
-	size, err := readVariableLengthSize(b[0], r)
+	size, err := packutil.VariableLengthSize(b[0], r)
 	if err != nil {
+		if errors.Is(err, packutil.ErrLengthOverflow) {
+			return nil, fmt.Errorf("%w: %w", ErrMalformedPackfile, err)
+		}
 		return nil, err
 	}
 
@@ -365,11 +473,20 @@ func objectEntry(r *Scanner) (stateFn, error) {
 
 	switch oh.Type {
 	case plumbing.OFSDeltaObject, plumbing.REFDeltaObject:
+		oh.Hash.ResetBySize(r.objectIDSize)
+
 		// For delta objects, we need to skip the base reference
 		if oh.Type == plumbing.OFSDeltaObject {
 			no, err := binary.ReadVariableWidthInt(r.scannerReader)
 			if err != nil {
 				return nil, err
+			}
+			// An OFS-delta references a base object that appears
+			// earlier in the pack; the negative offset must be
+			// strictly positive and not larger than the current
+			// object's offset.
+			if no <= 0 || no > oh.Offset {
+				return nil, fmt.Errorf("%w: invalid OFS delta offset", ErrMalformedPackfile)
 			}
 			oh.OffsetReference = oh.Offset - no
 		} else {
@@ -381,69 +498,57 @@ func objectEntry(r *Scanner) (stateFn, error) {
 		}
 	}
 
-	oh.ContentOffset = r.scannerReader.offset
-	err = r.zr.Reset(r.scannerReader)
-	if err != nil {
-		return nil, fmt.Errorf("zlib reset error: %s", err)
-	}
+	oh.ContentOffset = r.offset
 
+	zr, err := gogitsync.GetZlibReader(r.scannerReader)
+	if err != nil {
+		return nil, fmt.Errorf("zlib reset error: %w", err)
+	}
+	defer gogitsync.PutZlibReader(zr)
+
+	mw := io.Discard
 	if !oh.Type.IsDelta() {
 		r.hasher.Reset(oh.Type, oh.Size)
-
-		var mw io.Writer = r.hasher
+		mw = r.hasher
 		if r.storage != nil {
 			w, err := r.storage.RawObjectWriter(oh.Type, oh.Size)
 			if err != nil {
 				return nil, err
 			}
 
-			defer w.Close()
+			defer func() { _ = w.Close() }()
 			mw = io.MultiWriter(r.hasher, w)
 		}
-
-		// If the reader isn't seekable, and low memory mode
-		// isn't supported, keep the contents of the objects in
-		// memory.
-		if !r.lowMemoryMode && r.seeker == nil {
-			oh.content = gogitsync.GetBytesBuffer()
-			mw = io.MultiWriter(mw, oh.content)
-		}
-		if r.hasher256 != nil {
-			r.hasher256.Reset(oh.Type, oh.Size)
-			mw = io.MultiWriter(mw, r.hasher256)
-		}
-
-		// For non delta objects, simply calculate the hash of each object.
-		_, err = ioutil.CopyBufferPool(mw, r.zr.Reader)
-		if err != nil {
-			return nil, err
-		}
-
-		oh.Hash = r.hasher.Sum()
-		if r.hasher256 != nil {
-			h := r.hasher256.Sum()
-			oh.Hash256 = &h
-		}
-	} else {
-		// If data source is not io.Seeker, keep the content
-		// in the cache, so that it can be accessed by the Parser.
-		if !r.lowMemoryMode {
-			oh.content = gogitsync.GetBytesBuffer()
-			_, err = oh.content.ReadFrom(r.zr.Reader)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// We don't know the compressed length, so we can't seek to
-			// the next object, we must discard the data instead.
-			_, err = ioutil.CopyBufferPool(io.Discard, r.zr.Reader)
-			if err != nil {
-				return nil, err
-			}
-		}
 	}
-	r.scannerReader.Flush()
+
+	// If low memory mode isn't supported, and either the reader
+	// isn't seekable or this is a delta object, keep the contents
+	// of the objects in memory.
+	if !r.lowMemoryMode && (oh.Type.IsDelta() || r.seeker == nil) {
+		oh.content = gogitsync.GetBytesBuffer()
+		mw = io.MultiWriter(mw, oh.content)
+	}
+
+	// Bind the inflated stream by the size declared in the object header.
+	// A well-formed packfile never produces more inflated bytes than that
+	// value, so any overrun signals a malformed entry. For delta entries
+	// the declared size is the size of the delta instruction stream, not
+	// the resolved object.
+	mw = &boundedWriter{w: mw, limit: oh.Size}
+
+	_, err = ioutil.CopyBufferPool(mw, zr)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.Flush(); err != nil {
+		return nil, err
+	}
+
 	oh.Crc32 = r.crc.Sum32()
+	if !oh.Type.IsDelta() {
+		oh.Hash = r.hasher.Sum()
+	}
 
 	r.packData.Section = ObjectSection
 	r.packData.objectHeader = oh
@@ -456,19 +561,22 @@ func objectEntry(r *Scanner) (stateFn, error) {
 // calculated during the scanning process, an [ErrMalformedPackfile] is
 // returned.
 func packFooter(r *Scanner) (stateFn, error) {
-	r.scannerReader.Flush()
+	if err := r.Flush(); err != nil {
+		return nil, err
+	}
 
 	actual := r.packhash.Sum(nil)
 
 	var checksum plumbing.Hash
+	checksum.ResetBySize(r.objectIDSize)
 	_, err := checksum.ReadFrom(r.scannerReader)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read PACK checksum: %w", ErrMalformedPackfile)
+		return nil, fmt.Errorf("read pack checksum: %w", err)
 	}
 
 	if checksum.Compare(actual) != 0 {
-		return nil, fmt.Errorf("checksum mismatch expected %q but found %q: %w",
-			hex.EncodeToString(actual), checksum, ErrMalformedPackfile)
+		return nil, fmt.Errorf("%w: checksum mismatch: %q instead of %q",
+			ErrMalformedPackfile, hex.EncodeToString(actual), checksum)
 	}
 
 	r.packData.Section = FooterSection
@@ -476,42 +584,4 @@ func packFooter(r *Scanner) (stateFn, error) {
 	r.nextFn = nil
 
 	return nil, nil
-}
-
-func readVariableLengthSize(first byte, reader io.ByteReader) (uint64, error) {
-	// Extract the first part of the size (last 3 bits of the first byte).
-	size := uint64(first & 0x0F)
-
-	// |  001xxxx | xxxxxxxx | xxxxxxxx | ...
-	//
-	//	 ^^^       ^^^^^^^^   ^^^^^^^^
-	//	Type      Size Part 1   Size Part 2
-	//
-	// Check if more bytes are needed to fully determine the size.
-	if first&maskContinue != 0 {
-		shift := uint(4)
-
-		for {
-			b, err := reader.ReadByte()
-			if err != nil {
-				return 0, err
-			}
-
-			// Add the next 7 bits to the size.
-			size |= uint64(b&0x7F) << shift
-
-			// Check if the continuation bit is set.
-			if b&maskContinue == 0 {
-				break
-			}
-
-			// Prepare for the next byte.
-			shift += 7
-		}
-	}
-	return size, nil
-}
-
-func parseType(b byte) plumbing.ObjectType {
-	return plumbing.ObjectType((b & maskType) >> firstLengthBits)
 }

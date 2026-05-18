@@ -1,13 +1,14 @@
 package packfile
 
 import (
+	"bufio"
 	"crypto"
 	"fmt"
 	"io"
-	"os"
 	"sync"
 
 	billy "github.com/go-git/go-billy/v6"
+
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/cache"
 	format "github.com/go-git/go-git/v6/plumbing/format/config"
@@ -34,10 +35,11 @@ type Packfile struct {
 	scanner *Scanner
 
 	cache cache.Object
+	rbuf  *bufio.Reader
 
 	id           plumbing.Hash
 	m            sync.Mutex
-	objectIdSize int
+	objectIDSize int
 
 	once    sync.Once
 	onceErr error
@@ -53,7 +55,7 @@ func NewPackfile(
 ) *Packfile {
 	p := &Packfile{
 		file:         file,
-		objectIdSize: crypto.SHA1.Size(),
+		objectIDSize: crypto.SHA1.Size(),
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -134,7 +136,7 @@ func (p *Packfile) GetByType(typ plumbing.ObjectType) (storer.EncodedObjectIter,
 	}
 }
 
-// Returns the Packfile's inner scanner.
+// Scanner returns the Packfile's inner scanner.
 //
 // Deprecated: this will be removed in future versions of the packfile package
 // to avoid exposing the package internals and to improve its thread-safety.
@@ -162,7 +164,7 @@ func (p *Packfile) get(h plumbing.Hash) (plumbing.EncodedObject, error) {
 		return obj, nil
 	}
 
-	offset, err := p.Index.FindOffset(h)
+	offset, err := p.FindOffset(h)
 	if err != nil {
 		return nil, err
 	}
@@ -206,8 +208,11 @@ func (p *Packfile) init() error {
 			return
 		}
 
-		var opts []ScannerOption
-		if p.objectIdSize == format.SHA256Size {
+		p.rbuf = gogitsync.GetBufioReader(nil)
+
+		opts := []ScannerOption{WithBufioReader(p.rbuf)}
+
+		if p.objectIDSize == format.SHA256Size {
 			opts = append(opts, WithSHA256())
 		}
 
@@ -218,13 +223,13 @@ func (p *Packfile) init() error {
 			return
 		}
 
-		_, err := p.scanner.Seek(-int64(p.objectIdSize), io.SeekEnd)
+		_, err := p.scanner.Seek(-int64(p.objectIDSize), io.SeekEnd)
 		if err != nil {
 			p.onceErr = err
 			return
 		}
 
-		p.id.ResetBySize(p.objectIdSize)
+		p.id.ResetBySize(p.objectIDSize)
 		_, err = p.id.ReadFrom(p.scanner)
 		if err != nil {
 			p.onceErr = err
@@ -245,6 +250,9 @@ func (p *Packfile) headerFromOffset(offset int64) (*ObjectHeader, error) {
 	}
 
 	if !p.scanner.Scan() {
+		if err := p.scanner.Error(); err != nil {
+			return nil, err
+		}
 		return nil, plumbing.ErrObjectNotFound
 	}
 
@@ -256,6 +264,8 @@ func (p *Packfile) headerFromOffset(offset int64) (*ObjectHeader, error) {
 func (p *Packfile) Close() error {
 	p.m.Lock()
 	defer p.m.Unlock()
+
+	gogitsync.PutBufioReader(p.rbuf)
 
 	closer, ok := p.file.(io.Closer)
 	if !ok {
@@ -293,7 +303,13 @@ func (p *Packfile) objectFromHeader(oh *ObjectHeader) (plumbing.EncodedObject, e
 }
 
 func (p *Packfile) getMemoryObject(oh *ObjectHeader) (plumbing.EncodedObject, error) {
-	var obj = new(plumbing.MemoryObject)
+	of := format.SHA1
+	if p.objectIDSize == format.SHA256.Size() {
+		of = format.SHA256
+	}
+	h := plumbing.FromObjectFormat(of)
+	obj := plumbing.NewMemoryObject(h)
+
 	obj.SetSize(oh.Size)
 	obj.SetType(oh.Type)
 
@@ -305,7 +321,7 @@ func (p *Packfile) getMemoryObject(oh *ObjectHeader) (plumbing.EncodedObject, er
 
 	switch oh.Type {
 	case plumbing.CommitObject, plumbing.TreeObject, plumbing.BlobObject, plumbing.TagObject:
-		err = p.scanner.inflateContent(oh.ContentOffset, w)
+		err = p.scanner.inflateContent(oh.ContentOffset, w, oh.Size)
 
 	case plumbing.REFDeltaObject, plumbing.OFSDeltaObject:
 		var parent plumbing.EncodedObject
@@ -325,17 +341,20 @@ func (p *Packfile) getMemoryObject(oh *ObjectHeader) (plumbing.EncodedObject, er
 			return nil, fmt.Errorf("cannot find base object: %w", err)
 		}
 
+		// The scanner pre-populates oh.content for delta objects when
+		// running outside low-memory mode; only inflate when we don't
+		// already hold the bytes, otherwise this would append a
+		// duplicate copy of the delta payload.
 		if oh.content == nil {
 			oh.content = gogitsync.GetBytesBuffer()
-		}
-
-		err = p.scanner.inflateContent(oh.ContentOffset, oh.content)
-		if err != nil {
-			return nil, fmt.Errorf("cannot inflate content: %w", err)
+			err = p.scanner.inflateContent(oh.ContentOffset, oh.content, oh.Size)
+			if err != nil {
+				return nil, fmt.Errorf("cannot inflate content: %w", err)
+			}
 		}
 
 		obj.SetType(parent.Type())
-		err = ApplyDelta(obj, parent, oh.content) //nolint:ineffassign
+		err = ApplyDelta(obj, parent, oh.content)
 
 	default:
 		err = ErrInvalidObject.AddDetails("type %q", oh.Type)
@@ -349,8 +368,3 @@ func (p *Packfile) getMemoryObject(oh *ObjectHeader) (plumbing.EncodedObject, er
 
 	return obj, nil
 }
-
-// errInvalidWindows is the Windows equivalent to os.ErrInvalid
-const errInvalidWindows = "The parameter is incorrect."
-
-var errInvalidUnix = os.ErrInvalid.Error()

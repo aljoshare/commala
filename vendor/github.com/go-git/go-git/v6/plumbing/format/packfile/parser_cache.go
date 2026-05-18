@@ -4,8 +4,13 @@ import (
 	"slices"
 
 	"github.com/go-git/go-git/v6/plumbing"
-	"golang.org/x/exp/maps"
 )
+
+// maxObjectsPrealloc caps the up-front capacity reserved from the pack's
+// declared object count, so a header advertising an absurd quantity cannot
+// trigger a multi-gigabyte allocation. The slice and maps still grow
+// organically beyond this hint.
+const maxObjectsPrealloc = 1 << 16 // 64 Ki entries
 
 func newParserCache() *parserCache {
 	c := &parserCache{}
@@ -28,15 +33,16 @@ func (c *parserCache) Add(oh *ObjectHeader) {
 }
 
 func (c *parserCache) Reset(n int) {
+	hint := min(max(n, 0), maxObjectsPrealloc)
 	if c.oi == nil {
-		c.oi = make([]*ObjectHeader, 0, n)
-		c.oiByHash = make(map[plumbing.Hash]*ObjectHeader, n)
-		c.oiByOffset = make(map[int64]*ObjectHeader, n)
+		c.oi = make([]*ObjectHeader, 0, hint)
+		c.oiByHash = make(map[plumbing.Hash]*ObjectHeader, hint)
+		c.oiByOffset = make(map[int64]*ObjectHeader, hint)
 	} else {
 		c.oi = c.oi[:0]
-		c.oi = slices.Grow(c.oi, n)
+		c.oi = slices.Grow(c.oi, hint)
 
-		maps.Clear(c.oiByHash)
-		maps.Clear(c.oiByOffset)
+		clear(c.oiByHash)
+		clear(c.oiByOffset)
 	}
 }

@@ -33,16 +33,16 @@ func Write(w io.Writer, p []byte) (n int, err error) {
 	pktlen := len(p) + LenSize
 	n, err = w.Write(asciiHex16(pktlen))
 	if err != nil {
-		return
+		return n, err
 	}
 
 	n2, err := w.Write(p)
 	n += n2
-	return
+	return n, err
 }
 
 // Writef writes a pktline packet from a format string.
-func Writef(w io.Writer, format string, a ...interface{}) (n int, err error) {
+func Writef(w io.Writer, format string, a ...any) (n int, err error) {
 	if len(a) == 0 {
 		return Write(w, []byte(format))
 	}
@@ -61,12 +61,23 @@ func WriteString(w io.Writer, s string) (n int, err error) {
 
 // WriteError writes an error packet.
 func WriteError(w io.Writer, e error) (n int, err error) {
+	if w == nil {
+		return 0, ErrNilWriter
+	}
+	if e == nil {
+		return 0, ErrNilError
+	}
+
 	return Writef(w, "%s%s\n", errPrefix, e.Error())
 }
 
 // WriteFlush writes a flush packet.
 // This always writes 4 bytes.
 func WriteFlush(w io.Writer) (err error) {
+	if w == nil {
+		return ErrNilWriter
+	}
+
 	defer func() {
 		if err == nil {
 			trace.Packet.Printf("packet: > 0000")
@@ -80,6 +91,10 @@ func WriteFlush(w io.Writer) (err error) {
 // WriteDelim writes a delimiter packet.
 // This always writes 4 bytes.
 func WriteDelim(w io.Writer) (err error) {
+	if w == nil {
+		return ErrNilWriter
+	}
+
 	defer func() {
 		if err == nil {
 			trace.Packet.Printf("packet: > 0001")
@@ -93,6 +108,10 @@ func WriteDelim(w io.Writer) (err error) {
 // WriteResponseEnd writes a response-end packet.
 // This always writes 4 bytes.
 func WriteResponseEnd(w io.Writer) (err error) {
+	if w == nil {
+		return ErrNilWriter
+	}
+
 	defer func() {
 		if err == nil {
 			trace.Packet.Printf("packet: > 0002")
@@ -107,17 +126,26 @@ func WriteResponseEnd(w io.Writer) (err error) {
 // length.
 //
 // If p is less than 4 bytes, Read returns ErrInvalidPktLen. If p cannot hold
-// the entire packet, Read returns io.ErrUnexpectedEOF.
+// the entire packet, Read discards the packet and returns io.ErrUnexpectedEOF;
+// the stream is left positioned after the packet so subsequent pkt-line reads
+// stay in sync.
 // The error can be of type *ErrorLine if the packet is an error packet.
 //
 // Use packet length to determine the type of packet i.e. 0 is a flush packet,
 // 1 is a delim packet, 2 is a response-end packet, and a length greater or
 // equal to 4 is a data packet.
 func Read(r io.Reader, p []byte) (l int, err error) {
+	if r == nil {
+		return Err, ErrNilReader
+	}
+	if len(p) < LenSize {
+		return Err, fmt.Errorf("%w: small pkt-line buffer", ErrInvalidPktLen)
+	}
+
 	_, err = io.ReadFull(r, p[:LenSize])
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return Err, fmt.Errorf("%w: short pkt-line %d", ErrInvalidPktLen, len(p[:LenSize]))
+			return Err, fmt.Errorf("%w: short pkt-line %d", ErrInvalidPktLen, LenSize)
 		}
 		return Err, err
 	}
@@ -135,13 +163,18 @@ func Read(r io.Reader, p []byte) (l int, err error) {
 		trace.Packet.Printf("packet: < %04x", length)
 		return length, nil
 	}
+	if length > len(p) {
+		// Drain the payload so subsequent pkt-line reads stay in sync.
+		_, _ = io.CopyN(io.Discard, r, int64(length-LenSize))
+		return Err, io.ErrUnexpectedEOF
+	}
 
 	_, err = io.ReadFull(r, p[LenSize:length])
 	if err != nil {
 		return Err, err
 	}
 
-	if bytes.HasPrefix(p[LenSize:], errPrefix) {
+	if bytes.HasPrefix(p[LenSize:length], errPrefix) {
 		err = &ErrorLine{
 			Text: string(bytes.TrimSpace(p[LenSize+errPrefixSize : length])),
 		}
@@ -152,9 +185,8 @@ func Read(r io.Reader, p []byte) (l int, err error) {
 	return length, err
 }
 
-// ReadLine reads a packet line into a temporary shared buffer and
+// ReadLine reads a packet line into a newly allocated buffer and
 // returns the packet length and payload.
-// Subsequent calls to ReadLine may overwrite the buffer.
 //
 // Use packet length to determine the type of packet i.e. 0 is a flush packet,
 // 1 is a delim packet, 2 is a response-end packet, and a length greater or
@@ -170,7 +202,9 @@ func ReadLine(r io.Reader) (l int, p []byte, err error) {
 		return l, nil, err
 	}
 
-	return l, (*buf)[LenSize:l], err
+	clone := bytes.Clone((*buf)[LenSize:l])
+
+	return l, clone, err
 }
 
 // PeekLine reads a packet line without consuming it.
@@ -181,6 +215,10 @@ func ReadLine(r io.Reader) (l int, p []byte, err error) {
 //
 // The error can be of type *ErrorLine if the packet is an error packet.
 func PeekLine(r ioutil.ReadPeeker) (l int, p []byte, err error) {
+	if r == nil {
+		return Err, nil, ErrNilReader
+	}
+
 	n, err := r.Peek(LenSize)
 	if err != nil {
 		return Err, nil, err
