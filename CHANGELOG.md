@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/aljoshare/commala/compare/v0.6.1...v0.6.2) (2026-05-30)
+
+
+### Bug Fixes
+
+* **deps:** bump github.com/go-git/go-git/v6 ([#96](https://github.com/aljoshare/commala/issues/96)) ([432690a](https://github.com/aljoshare/commala/commit/432690a818de605ade31597560c297b43643c227))
+
 ## [0.6.1](https://github.com/aljoshare/commala/compare/v0.6.0...v0.6.1) (2026-03-30)
 
 
