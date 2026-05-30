@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v6/internal/pathutil"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 )
@@ -54,17 +55,28 @@ type Index struct {
 	ResolveUndo *ResolveUndo
 	// EndOfIndexEntry represents the 'End of Index Entry' extension
 	EndOfIndexEntry *EndOfIndexEntry
+	// ModTime is the modification time of the index file
+	ModTime time.Time
 }
 
-// Add creates a new Entry and returns it. The caller should first check that
-// another entry with the same path does not exist.
-func (i *Index) Add(path string) *Entry {
+// Add creates a new Entry and returns it. The caller should first check
+// that another entry with the same path does not exist.
+//
+// The path is validated against pathutil.ValidTreePath: the index feeds
+// future trees, so a name that the tree-side gates would reject must
+// not enter the index in the first place. Mirrors the FindEntry /
+// TreeWalker / TreeEntryFile chokepoints on the read side.
+func (i *Index) Add(path string) (*Entry, error) {
+	if err := pathutil.ValidTreePath(path); err != nil {
+		return nil, err
+	}
+
 	e := &Entry{
 		Name: filepath.ToSlash(path),
 	}
 
 	i.Entries = append(i.Entries, e)
-	return e
+	return e, nil
 }
 
 // Entry returns the entry that match the given path, if any.
@@ -107,7 +119,7 @@ func (i *Index) Glob(pattern string) (matches []*Entry, err error) {
 		}
 	}
 
-	return
+	return matches, err
 }
 
 // String is equivalent to `git ls-files --stage --debug`
@@ -214,7 +226,10 @@ type EndOfIndexEntry struct {
 }
 
 // SkipUnless applies patterns in the form of A, A/B, A/B/C
-// to the index to prevent the files from being checked out
+// to the index to prevent the files from being checked out.
+// Files whose names match one of the patterns have SkipWorktree cleared;
+// all other files have it set. This handles sparse-checkout dir switching
+// correctly: files moving into the active set are un-skipped.
 func (i *Index) SkipUnless(patterns []string) {
 	for _, e := range i.Entries {
 		var include bool
@@ -224,7 +239,9 @@ func (i *Index) SkipUnless(patterns []string) {
 				break
 			}
 		}
-		if !include {
+		if include {
+			e.SkipWorktree = false
+		} else {
 			e.SkipWorktree = true
 		}
 	}

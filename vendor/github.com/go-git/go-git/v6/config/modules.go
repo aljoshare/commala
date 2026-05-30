@@ -3,21 +3,28 @@ package config
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"regexp"
+	"strings"
 
+	"github.com/go-git/go-git/v6/internal/pathutil"
 	format "github.com/go-git/go-git/v6/plumbing/format/config"
 )
 
 var (
-	ErrModuleEmptyURL  = errors.New("module config: empty URL")
+	// ErrModuleEmptyURL is returned when a submodule has an empty URL.
+	ErrModuleEmptyURL = errors.New("module config: empty URL")
+	// ErrModuleEmptyPath is returned when a submodule has an empty path.
 	ErrModuleEmptyPath = errors.New("module config: empty path")
-	ErrModuleBadPath   = errors.New("submodule has an invalid path")
+	// ErrModuleBadPath is returned when a submodule has an invalid path.
+	ErrModuleBadPath = errors.New("submodule has an invalid path")
+	// ErrModuleBadName is returned when a submodule's name is not safe
+	// for use as a path component.
+	ErrModuleBadName = errors.New("ignoring suspicious submodule name")
 )
 
-var (
-	// Matches module paths with dotdot ".." components.
-	dotdotPath = regexp.MustCompile(`(^|[/\\])\.\.([/\\]|$)`)
-)
+// Matches module paths with dotdot ".." components.
+var dotdotPath = regexp.MustCompile(`(^|[/\\])\.\.([/\\]|$)`)
 
 // Modules defines the submodules properties, represents a .gitmodules file
 // https://www.kernel.org/pub/software/scm/git/docs/gitmodules.html
@@ -94,6 +101,10 @@ type Submodule struct {
 
 // Validate validates the fields and sets the default values.
 func (m *Submodule) Validate() error {
+	if err := validSubmoduleName(m.Name); err != nil {
+		return fmt.Errorf("%w: %q", ErrModuleBadName, m.Name)
+	}
+
 	if m.Path == "" {
 		return ErrModuleEmptyPath
 	}
@@ -108,6 +119,50 @@ func (m *Submodule) Validate() error {
 
 	return nil
 }
+
+// validSubmoduleName mirrors canonical Git's check_submodule_name in
+// submodule-config.c [1]: reject empty names and any name with a ".."
+// path component, using both '/' and '\\' as separators so the rule
+// is consistent across platforms. The component check is delegated to
+// `pathutil.IsHFSDot` and `pathutil.IsNTFSDot` with `.` as the needle,
+// which both cover the bare ".." case and reject components that
+// resolve to ".." after HFS+ Unicode normalisation (ignored code
+// points, e.g. `.<U+200C>.`) or NTFS trailing-space/dot/ADS
+// canonicalisation (e.g. `.. `, `..::$INDEX_ALLOCATION`).
+// `.gitmodules` is attacker-controlled by definition, so both checks
+// run unconditionally regardless of host OS.
+//
+// The additional checks (bare ".", NUL byte, leading or trailing
+// separator, drive-letter prefix) close go-git-specific edge cases
+// the canonical loop does not exercise: canonical Git treats names
+// as opaque C strings, while Go strings carry NULs through and the
+// billy filesystem layer is path-aware in ways Git's working storage
+// is not.
+//
+// [1]: https://github.com/git/git/blob/v2.54.0/submodule-config.c#L214-L237
+func validSubmoduleName(name string) error {
+	if name == "" || name == "." {
+		return ErrModuleBadName
+	}
+	for _, seg := range strings.FieldsFunc(name, isPathSep) {
+		if pathutil.IsHFSDot(seg, ".") || pathutil.IsNTFSDot(seg, ".", "") {
+			return ErrModuleBadName
+		}
+	}
+	// go-git-specific defensive checks beyond canonical Git.
+	if strings.ContainsRune(name, 0) {
+		return ErrModuleBadName
+	}
+	if isPathSep(rune(name[0])) || isPathSep(rune(name[len(name)-1])) {
+		return ErrModuleBadName
+	}
+	if len(name) >= 2 && name[1] == ':' {
+		return ErrModuleBadName
+	}
+	return nil
+}
+
+func isPathSep(r rune) bool { return r == '/' || r == '\\' }
 
 func (m *Submodule) unmarshal(s *format.Subsection) {
 	m.raw = s

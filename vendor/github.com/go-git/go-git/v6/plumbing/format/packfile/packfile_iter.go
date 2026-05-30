@@ -44,8 +44,11 @@ func (i *objectIter) next() (plumbing.EncodedObject, error) {
 		// assess the actual type.
 		if oh.Type.IsDelta() {
 			o, err := i.p.objectFromHeader(oh)
+			if err != nil {
+				return nil, err
+			}
 			if o.Type() == i.typ {
-				return o, err
+				return o, nil
 			}
 
 			continue
@@ -86,5 +89,5 @@ func (i *objectIter) Close() {
 	i.p.m.Lock()
 	defer i.p.m.Unlock()
 
-	i.iter.Close()
+	_ = i.iter.Close()
 }

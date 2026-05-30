@@ -62,7 +62,7 @@ compatibility status with go-git.
 | Feature       | Sub-feature | Status | Notes                                                | Examples |
 | ------------- | ----------- | ------ | ---------------------------------------------------- | -------- |
 | `apply`       |             | ❌     |                                                      |          |
-| `cherry-pick` |             | ❌     |                                                      |          |
+| `cherry-pick` |             | ⚠️ (partial) | It supports default merge strategy `--strategy=ort` and underlying auto-conflict resolve strategy options `--strategy-option` which are `theirs` and `ours`.|          |
 | `diff`        |             | ✅     | Patch object with UnifiedDiff output representation. |          |
 | `rebase`      |             | ❌     |                                                      |          |
 | `revert`      |             | ❌     |                                                      |          |
@@ -71,7 +71,7 @@ compatibility status with go-git.
 
 | Feature  | Sub-feature | Status | Notes | Examples                           |
 | -------- | ----------- | ------ | ----- | ---------------------------------- |
-| `bisect` |             | ❌     |       |                                    |
+| `bisect` |             | ⚠️     | Using Log, ForEach and Checkout.      | - See tests (search for `TestCheckoutBisect` in the repository) |
 | `blame`  |             | ✅     |       | - [blame](_examples/blame/main.go) |
 | `grep`   |             | ✅     |       |                                    |
 
@@ -106,14 +106,14 @@ compatibility status with go-git.
 | `archive`       |             | ❌     |       |          |
 | `bundle`        |             | ❌     |       |          |
 | `prune`         |             | ❌     |       |          |
-| `repack`        |             | ❌     |       |          |
+| `repack`        |             | ✅     | `(*git.Repository).RepackObjects`. |          |
 
 ## Server admin
 
-| Feature              | Sub-feature | Status | Notes | Examples                                  |
-| -------------------- | ----------- | ------ | ----- | ----------------------------------------- |
-| `daemon`             |             | ❌     |       |                                           |
-| `update-server-info` |             | ✅     |       | [cli](./cli/go-git/update_server_info.go) |
+| Feature              | Sub-feature | Status | Notes | Examples                                                   |
+| -------------------- | ----------- | ------ | ----- | ---------------------------------------------------------- |
+| `daemon`             |             | ⚠️ (partial) | via https://github.com/go-git/cli      |                                                            |
+| `update-server-info` |             | ✅     |       | [update-server-info](_examples/update-server-info/main.go) |
 
 ## Advanced
 
@@ -121,8 +121,7 @@ compatibility status with go-git.
 | ---------- | ----------- | ----------- | ----- | -------- |
 | `notes`    |             | ❌          |       |          |
 | `replace`  |             | ❌          |       |          |
-| `worktree` |             | ❌          |       |          |
-| `annotate` |             | (see blame) |       |          |
+| `worktree` | `add`       | ⚠️ (partial) | Creation and opening of linked worktrees via the `x/plumbing/worktree` package. Not all flags or subcommands are supported. | - [worktrees](_examples/worktrees/main.go) |
 
 ## GPG
 
@@ -166,7 +165,7 @@ compatibility status with go-git.
 | pack-protocol        | [v1](https://github.com/git/git/blob/master/Documentation/gitprotocol-pack.txt) | ✅     |       |
 | pack-protocol        | [v2](https://github.com/git/git/blob/master/Documentation/gitprotocol-v2.txt)   | ❌     |       |
 | multi-pack-index     | [v1](https://github.com/git/git/blob/master/Documentation/gitformat-pack.txt)   | ❌     |       |
-| pack-\*.rev files    | [v1](https://github.com/git/git/blob/master/Documentation/gitformat-pack.txt)   | ❌     |       |
+| pack-\*.rev files    | [v1](https://github.com/git/git/blob/master/Documentation/gitformat-pack.txt)   | ✅     |       |
 | pack-\*.mtimes files | [v1](https://github.com/git/git/blob/master/Documentation/gitformat-pack.txt)   | ❌     |       |
 | cruft packs          |                                                                                 | ❌     |       |
 
@@ -174,15 +173,15 @@ compatibility status with go-git.
 
 | Feature                        | Status       | Notes |
 | ------------------------------ | ------------ | ----- |
-| `multi_ack`                    | ❌           |       |
-| `multi_ack_detailed`           | ❌           |       |
+| `multi_ack`                    | ✅           |       |
+| `multi_ack_detailed`           | ✅           |       |
 | `no-done`                      | ❌           |       |
 | `thin-pack`                    | ❌           |       |
 | `side-band`                    | ⚠️ (partial) |       |
 | `side-band-64k`                | ⚠️ (partial) |       |
 | `ofs-delta`                    | ✅           |       |
 | `agent`                        | ✅           |       |
-| `object-format`                | ❌           |       |
+| `object-format`                | ✅           | [SHA-256](_examples/sha256/main.go)|
 | `symref`                       | ✅           |       |
 | `shallow`                      | ✅           |       |
 | `deepen-since`                 | ✅           |       |
@@ -206,22 +205,12 @@ compatibility status with go-git.
 
 | Scheme               | Status       | Notes                                                                  | Examples                                       |
 | -------------------- | ------------ | ---------------------------------------------------------------------- | ---------------------------------------------- |
-| `http(s)://` (dumb)  | ❌           |                                                                        |                                                |
+| `http(s)://` (dumb)  | ⚠️ (partial) | Requires filesystem-backed storage; shallow fetch is not supported.    |                                                |
 | `http(s)://` (smart) | ✅           |                                                                        |                                                |
 | `git://`             | ✅           |                                                                        |                                                |
 | `ssh://`             | ✅           |                                                                        |                                                |
-| `file://`            | ⚠️ (partial) | Warning: this is not pure Golang. This shells out to the `git` binary. |                                                |
+| `file://`            | ✅           |                                                                        |                                                |
 | Custom               | ✅           | All existing schemes can be replaced by custom implementations.        | - [custom_http](_examples/custom_http/main.go) |
-
-## SHA256
-
-| Feature  | Sub-feature | Status | Notes                              | Examples                             |
-| -------- | ----------- | ------ | ---------------------------------- | ------------------------------------ |
-| `init`   |             | ✅     | Requires building with tag sha256. | - [init](_examples/sha256/main.go)   |
-| `commit` |             | ✅     | Requires building with tag sha256. | - [commit](_examples/sha256/main.go) |
-| `pull`   |             | ❌     |                                    |                                      |
-| `fetch`  |             | ❌     |                                    |                                      |
-| `push`   |             | ❌     |                                    |                                      |
 
 ## Other features
 
@@ -229,6 +218,8 @@ compatibility status with go-git.
 | --------------- | --------------------------- | ------ | ---------------------------------------------- | -------- |
 | `config`        | `--local`                   | ✅     | Read and write per-repository (`.git/config`). |          |
 | `config`        | `--global` <br/> `--system` | ✅     | Read-only.                                     |          |
+| `config`        | `--worktree`                | ✅     | Read and write per-worktree (`.git/worktrees/<name>/config.worktree`). Requires `extensions.worktreeConfig=true`. |          |
 | `gitignore`     |                             | ✅     |                                                |          |
 | `gitattributes` |                             | ✅     |                                                |          |
-| `git-worktree`  |                             | ❌     | Multiple worktrees are not supported.          |          |
+| `git-worktree`  | `add`, `remove` and `list`  | ⚠️ (partial) | Not all flags nor subcommands are supported.   | - [worktrees](_examples/worktrees/main.go) |
+| `extensions`    | `worktreeConfig`            | ✅           | Per-worktree `config.worktree` files are read and overlaid on the common config when this extension is enabled. Supported only by `storage.filesystem`. |          |

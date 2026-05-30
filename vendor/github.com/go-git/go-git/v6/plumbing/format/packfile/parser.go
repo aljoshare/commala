@@ -27,6 +27,29 @@ var (
 	ErrDeltaNotCached = errors.New("delta could not be found in cache")
 )
 
+// maxObjectPreallocBytes caps the up-front size hint passed to
+// bytes.Buffer.Grow when staging an object's contents, so a malformed length
+// cannot trigger a huge or out-of-range allocation. The buffer still grows
+// dynamically as data is written; this is purely a hint cap.
+const maxObjectPreallocBytes = 1 << 30 // 1 GiB
+
+// Match upstream Git's pack depth ceiling: pack-objects.h OE_DEPTH_BITS,
+// enforced in builtin/pack-objects.c as (1 << OE_DEPTH_BITS) - 1.
+const maxDeltaChainDepth = 4095
+
+// growHint returns a non-negative int64 size, clamped to a sane upper bound,
+// suitable for passing to bytes.Buffer.Grow.
+func growHint(n int64) int {
+	switch {
+	case n <= 0:
+		return 0
+	case n > maxObjectPreallocBytes:
+		return maxObjectPreallocBytes
+	default:
+		return int(n)
+	}
+}
+
 // Parser decodes a packfile and calls any observer associated to it. Is used
 // to generate indexes.
 type Parser struct {
@@ -37,6 +60,8 @@ type Parser struct {
 	scanner   *Scanner
 	observers []Observer
 	hasher    plumbing.Hasher
+
+	objectFormat format.ObjectFormat
 
 	checksum plumbing.Hash
 	m        stdsync.Mutex
@@ -55,7 +80,7 @@ type LowMemoryCapable interface {
 // are parsed.
 func NewParser(data io.Reader, opts ...ParserOption) *Parser {
 	p := &Parser{
-		hasher: plumbing.NewHasher(format.SHA1, plumbing.AnyObject, 0),
+		objectFormat: format.DefaultObjectFormat,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -63,7 +88,13 @@ func NewParser(data io.Reader, opts ...ParserOption) *Parser {
 		}
 	}
 
-	p.scanner = NewScanner(data)
+	p.hasher = plumbing.NewHasher(p.objectFormat, plumbing.AnyObject, 0)
+	var sopts []ScannerOption
+	if p.objectFormat == format.SHA256 {
+		sopts = append(sopts, WithSHA256())
+	}
+
+	p.scanner = NewScanner(data, sopts...)
 
 	if p.storage != nil {
 		p.scanner.storage = p.storage
@@ -90,7 +121,7 @@ func (p *Parser) storeOrCache(oh *ObjectHeader) error {
 			return err
 		}
 
-		defer w.Close()
+		defer func() { _ = w.Close() }()
 
 		_, err = ioutil.CopyBufferPool(w, oh.content)
 		if err != nil {
@@ -116,11 +147,7 @@ func (p *Parser) storeOrCache(oh *ObjectHeader) error {
 		return err
 	}
 
-	if err := p.onInflatedObjectContent(oh.Hash, oh.Offset, oh.Crc32, nil); err != nil {
-		return err
-	}
-
-	return nil
+	return p.onInflatedObjectContent(oh.Hash, oh.Offset, oh.Crc32, nil)
 }
 
 func (p *Parser) resetCache(qty int) {
@@ -144,14 +171,16 @@ func (p *Parser) Parse() (plumbing.Hash, error) {
 			header := data.Value().(Header)
 
 			p.resetCache(int(header.ObjectsQty))
-			p.onHeader(header.ObjectsQty)
+			_ = p.onHeader(header.ObjectsQty)
 
 		case ObjectSection:
 			oh := data.Value().(ObjectHeader)
 			if oh.Type.IsDelta() {
-				if oh.Type == plumbing.OFSDeltaObject {
+				oh.Hash.ResetBySize(p.scanner.objectIDSize)
+				switch oh.Type {
+				case plumbing.OFSDeltaObject:
 					pendingDeltas = append(pendingDeltas, &oh)
-				} else if oh.Type == plumbing.REFDeltaObject {
+				case plumbing.REFDeltaObject:
 					pendingDeltaREFs = append(pendingDeltaREFs, &oh)
 				}
 				continue
@@ -162,15 +191,19 @@ func (p *Parser) Parse() (plumbing.Hash, error) {
 				oh.content = nil
 			}
 
-			p.storeOrCache(&oh)
+			_ = p.storeOrCache(&oh)
 
 		case FooterSection:
 			p.checksum = data.Value().(plumbing.Hash)
 		}
 	}
 
-	if p.scanner.objects == 0 {
-		return plumbing.ZeroHash, ErrEmptyPackfile
+	err := p.scanner.Error()
+	if err != nil {
+		if errors.Is(err, io.EOF) && p.scanner.objects == 0 {
+			return plumbing.ZeroHash, ErrEmptyPackfile
+		}
+		return plumbing.ZeroHash, err
 	}
 
 	for _, oh := range pendingDeltaREFs {
@@ -211,24 +244,25 @@ func (p *Parser) ensureContent(oh *ObjectHeader) error {
 	}
 
 	var err error
-	if !p.lowMemoryMode && oh.content != nil && oh.content.Len() > 0 {
+	switch {
+	case !p.lowMemoryMode && oh.content != nil && oh.content.Len() > 0:
 		source := oh.content
 		oh.content = sync.GetBytesBuffer()
 
 		defer sync.PutBytesBuffer(source)
 
 		err = p.applyPatchBaseHeader(oh, source, oh.content, nil)
-	} else if p.scanner.scannerReader.seeker != nil {
+	case p.scanner.seeker != nil:
 		deltaData := sync.GetBytesBuffer()
 		defer sync.PutBytesBuffer(deltaData)
 
-		err = p.scanner.inflateContent(oh.ContentOffset, deltaData)
+		err = p.scanner.inflateContent(oh.ContentOffset, deltaData, oh.Size)
 		if err != nil {
 			return fmt.Errorf("inflating content at offset %v: %w", oh.ContentOffset, err)
 		}
 
 		err = p.applyPatchBaseHeader(oh, deltaData, oh.content, nil)
-	} else {
+	default:
 		return fmt.Errorf("can't ensure content: %w", plumbing.ErrObjectNotFound)
 	}
 
@@ -267,11 +301,31 @@ func (p *Parser) processDelta(oh *ObjectHeader) error {
 		return fmt.Errorf("unsupported delta type: %v", oh.Type)
 	}
 
+	if err := checkDeltaChainDepth(oh); err != nil {
+		return err
+	}
+
 	if err := p.ensureContent(oh); err != nil {
 		return err
 	}
 
 	return p.storeOrCache(oh)
+}
+
+func checkDeltaChainDepth(oh *ObjectHeader) error {
+	var depth int
+	for current := oh; current != nil && current.isDeltaOnDisk(); current = current.parent {
+		depth++
+		if depth > maxDeltaChainDepth {
+			return fmt.Errorf("%w: delta chain depth exceeds %d", ErrMalformedPackfile, maxDeltaChainDepth)
+		}
+	}
+
+	return nil
+}
+
+func (oh *ObjectHeader) isDeltaOnDisk() bool {
+	return oh.Type.IsDelta() || oh.diskType.IsDelta()
 }
 
 // parentReader returns a [io.ReaderAt] for the decompressed contents
@@ -293,12 +347,12 @@ func (p *Parser) parentReader(parent *ObjectHeader) (io.ReaderAt, error) {
 			parent.Size = obj.Size()
 			r, err := obj.Reader()
 			if err == nil {
-				defer r.Close()
+				defer func() { _ = r.Close() }()
 
 				if parent.content == nil {
 					parent.content = sync.GetBytesBuffer()
 				}
-				parent.content.Grow(int(parent.Size))
+				parent.content.Grow(growHint(parent.Size))
 
 				_, err = ioutil.CopyBufferPool(parent.content, r)
 				if err == nil {
@@ -323,9 +377,9 @@ func (p *Parser) parentReader(parent *ObjectHeader) (io.ReaderAt, error) {
 	if parent.content == nil {
 		parent.content = sync.GetBytesBuffer()
 	}
-	parent.content.Grow(int(parent.Size))
+	parent.content.Grow(growHint(parent.Size))
 
-	err := p.scanner.inflateContent(parent.ContentOffset, parent.content)
+	err := p.scanner.inflateContent(parent.ContentOffset, parent.content, parent.Size)
 	if err != nil {
 		return nil, ErrReferenceDeltaNotFound
 	}
@@ -343,16 +397,16 @@ func (p *Parser) applyPatchBaseHeader(ota *ObjectHeader, delta io.Reader, target
 	}
 
 	typ := ota.Type
-	if ota.Hash == plumbing.ZeroHash {
+	if ota.Hash.IsZero() {
 		typ = ota.parent.Type
 	}
 
-	sz, h, err := patchDeltaWriter(target, parentContents, delta, typ, wh)
+	sz, h, err := patchDeltaWriter(target, parentContents, delta, typ, wh, p.objectFormat)
 	if err != nil {
 		return err
 	}
 
-	if ota.Hash == plumbing.ZeroHash {
+	if ota.Hash.IsZero() {
 		ota.Type = typ
 		ota.Size = int64(sz)
 		ota.Hash = h

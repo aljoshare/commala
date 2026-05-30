@@ -4,15 +4,9 @@ import (
 	"fmt"
 )
 
-type stateFn func() stateFn
-
 const (
-	// common
-	hashSize = 40
-
-	// advrefs
-	head   = "HEAD"
-	noHead = "capabilities^{}"
+	sha1HexSize   = 40
+	sha256HexSize = 64
 )
 
 var (
@@ -22,7 +16,6 @@ var (
 
 	// advertised-refs
 	null       = []byte("\x00")
-	peeled     = []byte("^{}")
 	noHeadMark = []byte(" capabilities^{}\x00")
 
 	// upload-request
@@ -48,10 +41,8 @@ func isFlush(payload []byte) bool {
 	return len(payload) == 0
 }
 
-var (
-	// ErrNilWriter is returned when a nil writer is passed to the encoder.
-	ErrNilWriter = fmt.Errorf("nil writer")
-)
+// ErrNilWriter is returned when a nil writer is passed to the encoder.
+var ErrNilWriter = fmt.Errorf("nil writer")
 
 // ErrUnexpectedData represents an unexpected data decoding a message
 type ErrUnexpectedData struct {

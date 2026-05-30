@@ -1,3 +1,4 @@
+// Package trace provides tracing utilities for debugging go-git operations.
 package trace
 
 import (
@@ -38,6 +39,9 @@ const (
 
 	// HTTP traces HTTP operations and requests.
 	HTTP
+
+	// Internal traces internal go-git operations for debugging.
+	Internal
 )
 
 // SetTarget sets the tracing targets.
@@ -51,16 +55,16 @@ func SetLogger(l *log.Logger) {
 }
 
 // Print prints the given message only if the target is enabled.
-func (t Target) Print(args ...interface{}) {
+func (t Target) Print(args ...any) {
 	if t.Enabled() {
-		logger.Output(2, fmt.Sprint(args...)) // nolint: errcheck
+		_ = logger.Output(2, fmt.Sprint(args...))
 	}
 }
 
 // Printf prints the given message only if the target is enabled.
-func (t Target) Printf(format string, args ...interface{}) {
+func (t Target) Printf(format string, args ...any) {
 	if t.Enabled() {
-		logger.Output(2, fmt.Sprintf(format, args...)) // nolint: errcheck
+		_ = logger.Output(2, fmt.Sprintf(format, args...))
 	}
 }
 
