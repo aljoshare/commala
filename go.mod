@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/log v1.0.0
 	github.com/enescakir/emoji v1.0.0
 	github.com/go-git/go-git/v6 v6.0.0-alpha.4
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 )
