@@ -42,11 +42,83 @@ func TestSignOffValidate(t *testing.T) {
 		From: "commit1",
 		To:   "commit2",
 	}
-	result, err := v.Validate(&r, m, []string{})
+	result, err := v.Validate(&r, m, []string{}, []string{}, []string{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 	if result.Valid != true {
 		t.Errorf("Expected message to be signed off, got %v", result.Valid)
+	}
+}
+
+func TestSignOffValidator_BranchPatterns(t *testing.T) {
+	v := SignOffValidator{}
+	// Unsigned commit
+	m := git.MockGit{
+		BranchName: "release-please--branches--main",
+		CommitMessages: map[string]string{
+			"c1": "chore(main): release 0.6.0",
+		},
+	}
+	r := git.CommitRange{From: "c1", To: "c1"}
+
+	// Without branch whitelist, should fail because commit is unsigned
+	res, err := v.Validate(&r, m, []string{}, []string{}, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Valid {
+		t.Errorf("expected signoff check to fail without whitelist")
+	}
+
+	// With branch whitelist, should be skipped and valid
+	res, err = v.Validate(&r, m, []string{}, []string{"^release-please--.*"}, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Valid {
+		t.Errorf("expected signoff check to pass (skipped)")
+	}
+	if res.Skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", res.Skipped)
+	}
+	if msg, ok := res.Messages["c1"]; !ok || !msg.Skipped {
+		t.Errorf("expected skipped message for c1, got %+v", msg)
+	}
+}
+
+func TestSignOffValidator_MessagePatterns(t *testing.T) {
+	v := SignOffValidator{}
+	m := git.MockGit{
+		BranchName: "main",
+		CommitMessages: map[string]string{
+			"c1": "chore(main): release 0.6.0",
+		},
+	}
+	r := git.CommitRange{From: "c1", To: "c1"}
+
+	// Without message pattern whitelist, should fail
+	res, err := v.Validate(&r, m, []string{}, []string{}, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Valid {
+		t.Errorf("expected signoff check to fail without whitelist")
+	}
+
+	// With message pattern whitelist, should be skipped
+	patterns := []string{`^chore\(.*\): release .*`}
+	res, err = v.Validate(&r, m, []string{}, []string{}, patterns)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Valid {
+		t.Errorf("expected signoff check to pass with message pattern whitelist")
+	}
+	if res.Skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", res.Skipped)
+	}
+	if msg, ok := res.Messages["c1"]; !ok || !msg.Skipped {
+		t.Errorf("expected skipped message for c1, got %+v", msg)
 	}
 }

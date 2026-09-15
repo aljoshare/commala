@@ -4,13 +4,22 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
-type MockGit struct{}
+type MockGit struct {
+	BranchName     string
+	CommitMessages map[string]string
+}
 
 func (m MockGit) GetBranchName() (string, error) {
+	if m.BranchName != "" {
+		return m.BranchName, nil
+	}
 	return "feature/mock-branch", nil
 }
 
 func (m MockGit) GetCommitMessages(from string, to string) (map[string]string, error) {
+	if m.CommitMessages != nil {
+		return m.CommitMessages, nil
+	}
 	var messageMap = make(map[string]string)
 	messageMap["commit1"] = "feat: add new feature\nSigned-off-by: Johen Doe <john@doe.com>"
 	messageMap["commit2"] = "fix: fix a bug\nSigned-off-by: Johen Doe <john@doe.com>"

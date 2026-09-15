@@ -33,12 +33,42 @@ func TestBranchIsNotConventional(t *testing.T) {
 func TestBranchValidate(t *testing.T) {
 	b := BranchValidator{}
 	m := git.MockGit{}
-	result, err := b.Validate(m, []string{})
+	result, err := b.Validate(m, []string{}, []string{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 	if result.Valid != true {
 		t.Errorf("Expected branch to be conventional, got %v", result.Valid)
+	}
+}
+
+func TestBranchValidator_PatternWhitelist(t *testing.T) {
+	b := BranchValidator{}
+	m := git.MockGit{BranchName: "release-please--branches--main--components--runo"}
+
+	// Without pattern whitelist, non-conventional branch should fail
+	result, err := b.Validate(m, []string{}, []string{})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if result.Valid {
+		t.Errorf("Expected branch to fail without whitelist")
+	}
+
+	// With matching pattern whitelist, should be skipped and valid
+	patterns := []string{"^release-please--.*"}
+	result, err = b.Validate(m, []string{}, patterns)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if !result.Valid {
+		t.Errorf("Expected branch to be valid (skipped), got invalid")
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Expected 1 skipped, got %d", result.Skipped)
+	}
+	if msg, ok := result.Messages["branch"]; !ok || !msg.Skipped {
+		t.Errorf("Expected skipped message for branch, got %+v", msg)
 	}
 }
 

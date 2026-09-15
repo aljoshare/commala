@@ -1,6 +1,9 @@
 package validator
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/aljoshare/commala/internal/git"
 )
 
@@ -61,6 +64,46 @@ func IsBranchAuthorWhitelisted(whitelist []string, g git.Git) (bool, string, err
 	for _, whitelistedEmail := range whitelist {
 		if authorEmail == whitelistedEmail {
 			return true, authorEmail, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// IsBranchNameWhitelisted checks if the branch name matches any regex in patterns.
+// Returns true if whitelisted, along with the matched pattern.
+func IsBranchNameWhitelisted(branchName string, patterns []string) (bool, string, error) {
+	if len(patterns) == 0 {
+		return false, "", nil
+	}
+
+	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return false, "", fmt.Errorf("invalid branch regex pattern %q: %w", pattern, err)
+		}
+		if re.MatchString(branchName) {
+			return true, pattern, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// IsCommitMessageWhitelisted checks if the commit message matches any regex in patterns.
+// Returns true if whitelisted, along with the matched pattern.
+func IsCommitMessageWhitelisted(message string, patterns []string) (bool, string, error) {
+	if len(patterns) == 0 {
+		return false, "", nil
+	}
+
+	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return false, "", fmt.Errorf("invalid commit message regex pattern %q: %w", pattern, err)
+		}
+		if re.MatchString(message) {
+			return true, pattern, nil
 		}
 	}
 

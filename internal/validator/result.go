@@ -25,10 +25,18 @@ type ValidationResult struct {
 
 // NewSkippedResultMessage creates a ResultMessage for a skipped validation
 func NewSkippedResultMessage(whitelistedEmail string) ResultMessage {
+	return NewSkippedResultMessageWithReason(
+		fmt.Sprintf("Skipped (author whitelisted: %s)", whitelistedEmail),
+		fmt.Sprintf("Author whitelisted: %s", whitelistedEmail),
+	)
+}
+
+// NewSkippedResultMessageWithReason creates a ResultMessage for a skipped validation with a custom message and reason
+func NewSkippedResultMessageWithReason(message, skipReason string) ResultMessage {
 	return ResultMessage{
 		Valid:      true, // Skipped commits don't fail validation
 		Skipped:    true,
-		Message:    fmt.Sprintf("Skipped (author whitelisted: %s)", whitelistedEmail),
-		SkipReason: fmt.Sprintf("Author whitelisted: %s", whitelistedEmail),
+		Message:    message,
+		SkipReason: skipReason,
 	}
 }

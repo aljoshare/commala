@@ -14,7 +14,7 @@ type MessageValidator struct {
 	messages map[string]string
 }
 
-func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []string) (*ValidationResult, error) {
+func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git, emailWhitelist []string, branchPatterns []string, messagePatterns []string) (*ValidationResult, error) {
 	log.Debugf("Validating if commit messages are conventional from %s to %s", cr.From, cr.To)
 	vr := ValidationResult{
 		Validator: "Conventional Message",
@@ -31,10 +31,38 @@ func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []s
 
 	vr.Messages = make(map[string]ResultMessage, len(m.messages))
 
-	// Process each commit
-	for commitHash := range m.messages {
-		// Check whitelist before validation
-		whitelisted, authorEmail, err := IsWhitelisted(commitHash, whitelist, g, cr)
+	// 1. Check if current branch matches branchPatterns
+	if len(branchPatterns) > 0 {
+		branchName, err := g.GetBranchName()
+		if err != nil {
+			return nil, err
+		}
+		branchWhitelisted, matchedPattern, err := IsBranchNameWhitelisted(branchName, branchPatterns)
+		if err != nil {
+			return nil, err
+		}
+		if branchWhitelisted {
+			vr.Valid = true
+			for commitHash := range m.messages {
+				vr.Skipped++
+				vr.Messages[commitHash] = NewSkippedResultMessageWithReason(
+					fmt.Sprintf("Skipped (branch pattern matched: %s)", matchedPattern),
+					fmt.Sprintf("Branch pattern matched: %s", matchedPattern),
+				)
+			}
+			if vr.Skipped > 0 {
+				vr.Summary = fmt.Sprintf("All messages are conventional (%d skipped)\n", vr.Skipped)
+			} else {
+				vr.Summary = "All commit messages are conventional\n"
+			}
+			return &vr, nil
+		}
+	}
+
+	// 2. Process each commit
+	for commitHash, commitMsg := range m.messages {
+		// Check email whitelist before validation
+		whitelisted, authorEmail, err := IsWhitelisted(commitHash, emailWhitelist, g, cr)
 		if err != nil {
 			return nil, err
 		}
@@ -45,9 +73,24 @@ func (m MessageValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []s
 			continue
 		}
 
+		// Check commit message against messagePatterns
+		msgWhitelisted, matchedPattern, err := IsCommitMessageWhitelisted(commitMsg, messagePatterns)
+		if err != nil {
+			return nil, err
+		}
+
+		if msgWhitelisted {
+			vr.Skipped++
+			vr.Messages[commitHash] = NewSkippedResultMessageWithReason(
+				fmt.Sprintf("Skipped (commit message pattern matched: %s)", matchedPattern),
+				fmt.Sprintf("Commit message pattern matched: %s", matchedPattern),
+			)
+			continue
+		}
+
 		// Existing validation logic
 		vr.Assertions++
-		matched, err := regexp.Match(`^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\([\w\-\.]+\))?(!)?: ([\w ])+([\s\S]*)`, []byte(m.messages[commitHash]))
+		matched, err := regexp.Match(`^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\([\w\-\.]+\))?(!)?: ([\w ])+([\s\S]*)`, []byte(commitMsg))
 		if err != nil {
 			return nil, err
 		}

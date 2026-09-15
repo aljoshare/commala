@@ -14,7 +14,7 @@ type SignOffValidator struct {
 	messages map[string]string
 }
 
-func (m SignOffValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []string) (*ValidationResult, error) {
+func (m SignOffValidator) Validate(cr *git.CommitRange, g git.Git, emailWhitelist []string, branchPatterns []string, messagePatterns []string) (*ValidationResult, error) {
 	log.Debugf("Validating if commit messages are signed off from %s to %s", cr.From, cr.To)
 	vr := ValidationResult{
 		Validator: "Signed-Off Message",
@@ -28,22 +28,46 @@ func (m SignOffValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []s
 	if err != nil {
 		return nil, err
 	}
+
+	vr.Messages = make(map[string]ResultMessage, len(m.messages))
+
+	// 1. Check if current branch matches branchPatterns
+	if len(branchPatterns) > 0 {
+		branchName, err := g.GetBranchName()
+		if err != nil {
+			return nil, err
+		}
+		branchWhitelisted, matchedPattern, err := IsBranchNameWhitelisted(branchName, branchPatterns)
+		if err != nil {
+			return nil, err
+		}
+		if branchWhitelisted {
+			vr.Valid = true
+			for commitHash := range m.messages {
+				vr.Skipped++
+				vr.Messages[commitHash] = NewSkippedResultMessageWithReason(
+					fmt.Sprintf("Skipped (branch pattern matched: %s)", matchedPattern),
+					fmt.Sprintf("Branch pattern matched: %s", matchedPattern),
+				)
+			}
+			if vr.Skipped > 0 {
+				vr.Summary = fmt.Sprintf("All commits are signed off (%d skipped)\n", vr.Skipped)
+			} else {
+				vr.Summary = "All commit messages are signed off\n"
+			}
+			return &vr, nil
+		}
+	}
+
+	// 2. For each commit:
 	vs, err := m.isSignedOff()
 	if err != nil {
 		return nil, err
 	}
-	if utils.AllTrue(vs) {
-		vr.Valid = true
-		vr.Summary = "All commit messages are signed off\n"
-		return &vr, nil
-	} else {
-		vr.Valid = false
-		vr.Summary = "Not all commit messages are signed off\n"
-	}
-	vr.Messages = make(map[string]ResultMessage, len(m.messages))
-	for commitHash := range m.messages {
-		// Check whitelist before validation
-		whitelisted, authorEmail, err := IsWhitelisted(commitHash, whitelist, g, cr)
+
+	for commitHash, commitMsg := range m.messages {
+		// Check email whitelist
+		whitelisted, authorEmail, err := IsWhitelisted(commitHash, emailWhitelist, g, cr)
 		if err != nil {
 			return nil, err
 		}
@@ -51,6 +75,21 @@ func (m SignOffValidator) Validate(cr *git.CommitRange, g git.Git, whitelist []s
 		if whitelisted {
 			vr.Skipped++
 			vr.Messages[commitHash] = NewSkippedResultMessage(authorEmail)
+			continue
+		}
+
+		// Check commit message against messagePatterns
+		msgWhitelisted, matchedPattern, err := IsCommitMessageWhitelisted(commitMsg, messagePatterns)
+		if err != nil {
+			return nil, err
+		}
+
+		if msgWhitelisted {
+			vr.Skipped++
+			vr.Messages[commitHash] = NewSkippedResultMessageWithReason(
+				fmt.Sprintf("Skipped (commit message pattern matched: %s)", matchedPattern),
+				fmt.Sprintf("Commit message pattern matched: %s", matchedPattern),
+			)
 			continue
 		}
 

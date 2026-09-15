@@ -42,6 +42,11 @@ commala check HEAD~5 --config=/path/to/custom-config.yml
 report:
   junit:
     path: commala-junit.xml # --report-junit-path
+
+# Global branch whitelist: skips all validations for matching branches
+whitelist:
+  branches: [] # --whitelist-branches
+
 validate:
   author:
     name:
@@ -53,12 +58,17 @@ validate:
   branch:
     enabled: true # --branch-enabled
     whitelist: [] # --branch-whitelist
+    patterns: [] # --branch-pattern-whitelist
   message:
     enabled: true # --message-enabled
     whitelist: [] # --message-whitelist
+    branch_patterns: [] # --message-branch-whitelist
+    patterns: [] # --message-pattern-whitelist
   signoff:
     enabled: true # --signoff-enabled
     whitelist: [] # --signoff-whitelist
+    branch_patterns: [] # --signoff-branch-whitelist
+    patterns: [] # --signoff-pattern-whitelist
 ```
 
 ### Contributor Whitelists
@@ -88,13 +98,82 @@ commala check HEAD~5 \
   --message-whitelist="dependabot[bot]@users.noreply.github.com"
 ```
 
+### Pattern-Based Whitelisting (Release Please, Automated MRs)
+
+Automated tools like [Release Please](https://github.com/googleapis/release-please) or Renovate often open merge requests using Personal Access Tokens (PATs) so downstream CI workflows trigger. In these cases, the commits and branch carry a regular contributor's identity (e.g. `you@domain.com`), meaning email whitelisting cannot be used without exempting all manual commits by that user.
+
+Commala supports **pattern-based whitelisting** using Go regular expressions at both the global MR level and per-validator level:
+
+#### 1. Global MR / Branch Whitelist
+
+Skip all validations on matching branches (all checks reported as `skipped` in console and JUnit XML):
+
+```yaml
+whitelist:
+  branches:
+    - "^release-please--.*"
+    - "^dependabot/.*"
+```
+
+CLI flag:
+
+```bash
+commala check HEAD~1 --whitelist-branches="^release-please--.*"
+```
+
+#### 2. Granular Per-Validator Pattern Whitelist
+
+Control exemptions specifically per validator:
+
+```yaml
+validate:
+  branch:
+    enabled: true
+    patterns: # Branch regex patterns to skip branch validation
+      - "^release-please--.*"
+  signoff:
+    enabled: true
+    branch_patterns: # Branch regex patterns to skip sign-off validation
+      - "^release-please--.*"
+    patterns: # Commit message regex patterns to skip sign-off validation
+      - '^chore\(.*\): release .*'
+  message:
+    enabled: true
+    branch_patterns: # Branch regex patterns to skip message validation
+      - "^release-please--.*"
+    patterns: # Commit message regex patterns to skip message validation
+      - '^chore\(.*\): release .*'
+```
+
+CLI flags:
+
+```bash
+commala check HEAD~1 \
+  --branch-pattern-whitelist="^release-please--.*" \
+  --signoff-pattern-whitelist='^chore\(.*\): release .*' \
+  --message-pattern-whitelist='^chore\(.*\): release .*'
+```
+
+#### CI Detached HEAD Branch Detection & Override
+
+In CI environments (e.g., GitHub Actions, GitLab CI), commits are often checked out in a detached `HEAD` state. Commala automatically inspects CI environment variables to detect the branch name:
+
+- GitHub Actions: `GITHUB_HEAD_REF`
+- GitLab CI: `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, `CI_COMMIT_REF_NAME`, `CI_COMMIT_BRANCH`
+- Bitbucket Pipelines: `BITBUCKET_BRANCH`
+
+You can also explicitly specify or override the branch name using `--branch-name` or `COMMALA_BRANCH_NAME`:
+
+```bash
+commala check HEAD~1 --branch-name="release-please--branches--main"
+```
+
 **How It Works:**
 
-- Commits from whitelisted authors are marked as "skipped" during validation
-- Skipped commits are clearly marked in console output (gray color)
-- JUnit reports include `<skipped>` elements for whitelisted commits
-- Skipped commits don't count as failures
-- Whitelist matching uses exact email comparison (case-sensitive)
+- Commits or branches matching whitelists are marked as "skipped" during validation
+- Skipped validations are clearly marked in console output (light green color)
+- JUnit reports include `<skipped>` elements with reasons (e.g., `Branch pattern matched: ...` or `Branch whitelisted: ...`)
+- Skipped validations do not count as failures and exit with status code 0
 
 ### CLI
 

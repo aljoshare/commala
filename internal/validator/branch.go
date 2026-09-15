@@ -14,7 +14,7 @@ type BranchValidator struct {
 	branchName string
 }
 
-func (b BranchValidator) Validate(g git.Git, whitelist []string) (*ValidationResult, error) {
+func (b BranchValidator) Validate(g git.Git, whitelist []string, branchPatterns []string) (*ValidationResult, error) {
 	log.Debug("Validating Branch")
 	vr := ValidationResult{
 		Validator:  "Branch",
@@ -45,6 +45,23 @@ func (b BranchValidator) Validate(g git.Git, whitelist []string) (*ValidationRes
 	if err != nil {
 		return nil, err
 	}
+
+	// Check if branch name matches branchPatterns
+	patternMatched, pattern, err := IsBranchNameWhitelisted(b.branchName, branchPatterns)
+	if err != nil {
+		return nil, err
+	}
+	if patternMatched {
+		vr.Valid = true
+		vr.Skipped++
+		vr.Summary = fmt.Sprintf("Branch validation skipped (1 skipped)")
+		vr.Messages["branch"] = NewSkippedResultMessageWithReason(
+			fmt.Sprintf("Skipped (branch pattern matched: %s)", pattern),
+			fmt.Sprintf("Branch pattern matched: %s", pattern),
+		)
+		return &vr, nil
+	}
+
 	valid, err := b.isConventional()
 	vr.Assertions++
 	if valid {
