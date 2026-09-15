@@ -6,7 +6,23 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 )
 
+func clearCiEnv(t *testing.T) {
+	t.Helper()
+	ciEnvVars := []string{
+		"COMMALA_BRANCH_NAME",
+		"GITHUB_HEAD_REF",
+		"CI_MERGE_REQUEST_SOURCE_BRANCH_NAME",
+		"CI_COMMIT_REF_NAME",
+		"CI_COMMIT_BRANCH",
+		"BITBUCKET_BRANCH",
+	}
+	for _, envVar := range ciEnvVars {
+		t.Setenv(envVar, "")
+	}
+}
+
 func TestGetBranchName_CommalaBranchNameEnv(t *testing.T) {
+	clearCiEnv(t)
 	t.Setenv("COMMALA_BRANCH_NAME", "my-custom-branch")
 	r := RealGit{}
 	branch, err := r.GetBranchName()
@@ -19,6 +35,7 @@ func TestGetBranchName_CommalaBranchNameEnv(t *testing.T) {
 }
 
 func TestResolveBranchName_NormalBranch(t *testing.T) {
+	clearCiEnv(t)
 	ref := plumbing.NewReferenceFromStrings("refs/heads/feature/login", "0123456789abcdef0123456789abcdef01234567")
 	branch, err := resolveBranchName(ref, nil)
 	if err != nil {
@@ -30,6 +47,7 @@ func TestResolveBranchName_NormalBranch(t *testing.T) {
 }
 
 func TestResolveBranchName_DetachedHead_GithubHeadRef(t *testing.T) {
+	clearCiEnv(t)
 	t.Setenv("GITHUB_HEAD_REF", "release-please--branches--main")
 	ref := plumbing.NewReferenceFromStrings("HEAD", "0123456789abcdef0123456789abcdef01234567")
 	branch, err := resolveBranchName(ref, nil)
@@ -42,6 +60,7 @@ func TestResolveBranchName_DetachedHead_GithubHeadRef(t *testing.T) {
 }
 
 func TestResolveBranchName_DetachedHead_GitlabCi(t *testing.T) {
+	clearCiEnv(t)
 	t.Setenv("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", "feature/gitlab-mr")
 	ref := plumbing.NewReferenceFromStrings("HEAD", "0123456789abcdef0123456789abcdef01234567")
 	branch, err := resolveBranchName(ref, nil)
@@ -54,6 +73,7 @@ func TestResolveBranchName_DetachedHead_GitlabCi(t *testing.T) {
 }
 
 func TestResolveBranchName_DetachedHead_NoCiEnv(t *testing.T) {
+	clearCiEnv(t)
 	ref := plumbing.NewReferenceFromStrings("HEAD", "0123456789abcdef0123456789abcdef01234567")
 	branch, err := resolveBranchName(ref, nil)
 	if err != nil {
