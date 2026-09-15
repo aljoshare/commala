@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -50,12 +51,42 @@ func (r RealGit) getHead() (*plumbing.Reference, error) {
 }
 
 func (r RealGit) GetBranchName() (string, error) {
-	h, err := r.getHead()
-	if err != nil {
-		return "", fmt.Errorf("can't get branch name")
+	if branchName := os.Getenv("COMMALA_BRANCH_NAME"); branchName != "" {
+		return branchName, nil
 	}
-	bn := h.Name().Short()
-	return bn, nil
+
+	h, err := r.getHead()
+	return resolveBranchName(h, err)
+}
+
+func resolveBranchName(h *plumbing.Reference, headErr error) (string, error) {
+	if headErr == nil && h != nil {
+		bn := h.Name().Short()
+		if h.Name().IsBranch() && bn != "HEAD" {
+			return bn, nil
+		}
+	}
+
+	ciEnvVars := []string{
+		"GITHUB_HEAD_REF",
+		"CI_MERGE_REQUEST_SOURCE_BRANCH_NAME",
+		"CI_COMMIT_REF_NAME",
+		"CI_COMMIT_BRANCH",
+		"BITBUCKET_BRANCH",
+	}
+	for _, envVar := range ciEnvVars {
+		if val := os.Getenv(envVar); val != "" {
+			return val, nil
+		}
+	}
+
+	if headErr != nil {
+		return "", fmt.Errorf("can't get branch name: %w", headErr)
+	}
+	if h != nil {
+		return h.Name().Short(), nil
+	}
+	return "", fmt.Errorf("can't get branch name")
 }
 
 func (r RealGit) GetCommitMessages(from string, to string) (map[string]string, error) {

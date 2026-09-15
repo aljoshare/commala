@@ -8,17 +8,23 @@ import (
 )
 
 type Config struct {
-	ReportJunitPath      string
-	AuthorEmailEnabled   bool
-	AuthorEmailWhitelist []string
-	AuthorNameEnabled    bool
-	AuthorNameWhitelist  []string
-	BranchEnabled        bool
-	BranchWhitelist      []string
-	MessageEnabled       bool
-	MessageWhitelist     []string
-	SignOffEnabled       bool
-	SignOffWhitelist     []string
+	ReportJunitPath       string
+	AuthorEmailEnabled    bool
+	AuthorEmailWhitelist  []string
+	AuthorNameEnabled     bool
+	AuthorNameWhitelist   []string
+	BranchEnabled         bool
+	BranchWhitelist       []string
+	BranchPatterns        []string
+	MessageEnabled        bool
+	MessageWhitelist      []string
+	MessageBranchPatterns []string
+	MessagePatterns       []string
+	SignOffEnabled        bool
+	SignOffWhitelist      []string
+	SignOffBranchPatterns []string
+	SignOffPatterns       []string
+	WhitelistBranches     []string
 }
 
 func (c *Config) ReadConfig() {
@@ -54,8 +60,14 @@ func (c *Config) ReadConfig() {
 	c.AuthorNameWhitelist = viper.GetStringSlice("validate.author.name.whitelist")
 	c.BranchEnabled = viper.GetBool("validate.branch.enabled")
 	c.BranchWhitelist = viper.GetStringSlice("validate.branch.whitelist")
+	c.BranchPatterns = viper.GetStringSlice("validate.branch.patterns")
 	c.MessageEnabled = viper.GetBool("validate.message.enabled")
 	c.MessageWhitelist = viper.GetStringSlice("validate.message.whitelist")
+	c.MessageBranchPatterns = viper.GetStringSlice("validate.message.branch_patterns")
+	c.MessagePatterns = viper.GetStringSlice("validate.message.patterns")
 	c.SignOffEnabled = viper.GetBool("validate.signoff.enabled")
 	c.SignOffWhitelist = viper.GetStringSlice("validate.signoff.whitelist")
+	c.SignOffBranchPatterns = viper.GetStringSlice("validate.signoff.branch_patterns")
+	c.SignOffPatterns = viper.GetStringSlice("validate.signoff.patterns")
+	c.WhitelistBranches = viper.GetStringSlice("whitelist.branches")
 }

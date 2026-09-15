@@ -42,12 +42,68 @@ func TestMessageValidate(t *testing.T) {
 		From: "commit1",
 		To:   "commit2",
 	}
-	result, err := v.Validate(&r, m, []string{})
+	result, err := v.Validate(&r, m, []string{}, []string{}, []string{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 	if result.Valid != true {
 		t.Errorf("Expected message to be conventional, got %v", result.Valid)
+	}
+}
+
+func TestMessageValidator_Patterns(t *testing.T) {
+	v := MessageValidator{}
+
+	// Test 1: Commit message pattern
+	// Without whitelist, this non-conventional message fails
+	mNonConv := git.MockGit{
+		BranchName: "feature/test",
+		CommitMessages: map[string]string{
+			"c1": "release 0.6.0 without conventional prefix",
+		},
+	}
+	rNonConv := git.CommitRange{From: "c1", To: "c1"}
+	res, err := v.Validate(&rNonConv, mNonConv, []string{}, []string{}, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Valid {
+		t.Errorf("expected failure for non-conventional commit message")
+	}
+
+	// With message pattern matching, it should be skipped and valid
+	patterns := []string{`^release 0\.6\.0.*`}
+	res, err = v.Validate(&rNonConv, mNonConv, []string{}, []string{}, patterns)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Valid {
+		t.Errorf("expected validation to pass when message pattern matches")
+	}
+	if res.Skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", res.Skipped)
+	}
+	if msg, ok := res.Messages["c1"]; !ok || !msg.Skipped {
+		t.Errorf("expected message to be skipped, got %+v", msg)
+	}
+
+	// Test 2: Branch pattern
+	mBranch := git.MockGit{
+		BranchName: "release-please--branches--main",
+		CommitMessages: map[string]string{
+			"c1": "not a conventional message at all",
+		},
+	}
+	rBranch := git.CommitRange{From: "c1", To: "c1"}
+	res, err = v.Validate(&rBranch, mBranch, []string{}, []string{"^release-please--.*"}, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Valid {
+		t.Errorf("expected branch pattern to skip message validation")
+	}
+	if res.Skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", res.Skipped)
 	}
 }
 

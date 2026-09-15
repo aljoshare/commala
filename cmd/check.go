@@ -57,6 +57,34 @@ func init() {
 	queryCmd.Flags().StringSlice("author-email-whitelist", []string{}, "Contributor emails to whitelist for author email validation")
 	viper.BindEnv("validate.author.email.whitelist", "COMMALA_VALIDATE_AUTHOR_EMAIL_WHITELIST")
 	viper.BindPFlag("validate.author.email.whitelist", queryCmd.Flags().Lookup("author-email-whitelist"))
+
+	queryCmd.Flags().StringSlice("whitelist-branches", []string{}, "Regex patterns for branches to skip all validations")
+	viper.BindEnv("whitelist.branches", "COMMALA_WHITELIST_BRANCHES")
+	viper.BindPFlag("whitelist.branches", queryCmd.Flags().Lookup("whitelist-branches"))
+
+	queryCmd.Flags().StringSlice("branch-pattern-whitelist", []string{}, "Regex patterns for branch names to skip branch validation")
+	viper.BindEnv("validate.branch.patterns", "COMMALA_VALIDATE_BRANCH_PATTERNS")
+	viper.BindPFlag("validate.branch.patterns", queryCmd.Flags().Lookup("branch-pattern-whitelist"))
+
+	queryCmd.Flags().StringSlice("signoff-branch-whitelist", []string{}, "Regex patterns for branch names to skip signoff validation")
+	viper.BindEnv("validate.signoff.branch_patterns", "COMMALA_VALIDATE_SIGNOFF_BRANCH_PATTERNS")
+	viper.BindPFlag("validate.signoff.branch_patterns", queryCmd.Flags().Lookup("signoff-branch-whitelist"))
+
+	queryCmd.Flags().StringSlice("signoff-pattern-whitelist", []string{}, "Regex patterns for commit messages to skip signoff validation")
+	viper.BindEnv("validate.signoff.patterns", "COMMALA_VALIDATE_SIGNOFF_PATTERNS")
+	viper.BindPFlag("validate.signoff.patterns", queryCmd.Flags().Lookup("signoff-pattern-whitelist"))
+
+	queryCmd.Flags().StringSlice("message-branch-whitelist", []string{}, "Regex patterns for branch names to skip message validation")
+	viper.BindEnv("validate.message.branch_patterns", "COMMALA_VALIDATE_MESSAGE_BRANCH_PATTERNS")
+	viper.BindPFlag("validate.message.branch_patterns", queryCmd.Flags().Lookup("message-branch-whitelist"))
+
+	queryCmd.Flags().StringSlice("message-pattern-whitelist", []string{}, "Regex patterns for commit messages to skip message validation")
+	viper.BindEnv("validate.message.patterns", "COMMALA_VALIDATE_MESSAGE_PATTERNS")
+	viper.BindPFlag("validate.message.patterns", queryCmd.Flags().Lookup("message-pattern-whitelist"))
+
+	queryCmd.Flags().String("branch-name", "", "Manual override for branch name")
+	viper.BindEnv("branch.name", "COMMALA_BRANCH_NAME")
+	viper.BindPFlag("branch.name", queryCmd.Flags().Lookup("branch-name"))
 }
 
 var queryCmd = &cobra.Command{
@@ -64,6 +92,9 @@ var queryCmd = &cobra.Command{
 	Short: "Check commits",
 	Args:  cobra.MatchAll(cobra.ExactArgs(1)),
 	Run: func(cmd *cobra.Command, args []string) {
+		if bn := viper.GetString("branch.name"); bn != "" {
+			os.Setenv("COMMALA_BRANCH_NAME", bn)
+		}
 		c := config.Config{}
 		c.ReadConfig()
 		g := git.RealGit{}
