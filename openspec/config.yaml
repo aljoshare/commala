@@ -1,0 +1,34 @@
+schema: spec-driven
+
+context: |
+  # Commala Architecture & Context
+
+  Commala is a fast, lightweight Git commit and branch linting CLI tool written in Go.
+  It enforces git hygiene across repositories, CI/CD pipelines (GitHub Actions, GitLab CI), and local hooks.
+
+  ## Core Domain & Validators
+  - **Branch**: Validates branch names against the Conventional Branch specification (`feature/*`, `bugfix/*`, `hotfix/*`, `chore/*`, etc.). Supports pattern-based whitelisting and CI detached HEAD branch detection.
+  - **Message**: Validates commit messages against the Conventional Commits specification.
+  - **Sign-off**: Ensures commits include a valid `Signed-off-by:` footer (DCO). Supports commit message pattern and branch pattern whitelisting.
+  - **Author Name & Email**: Checks that author name and email meet defined standards.
+  - **Whitelisting**: Supports global branch regex whitelisting (`whitelist.branches`) to bypass all validators for automated PRs (e.g. Release Please, Dependabot), and granular validator-level regex patterns.
+
+  ## Tech Stack & Conventions
+  - Language: Go (1.23+)
+  - Git abstraction: `go-git` (`github.com/go-git/go-git/v6`) with mock interfaces (`internal/git`) for isolated testing.
+  - Configuration: Viper (`internal/config`) supporting `.commala.yml`, CLI flags, and environment variables.
+  - Test-first philosophy: Ensure unit tests cover all edge cases, detached HEAD fallbacks, and regex matching.
+
+  ## Development Quality Gates
+  - Formatting: `npx prettier --write .` and `go fmt ./...`
+  - Modules: `go mod tidy && go mod vendor`
+  - Tests: `go clean -testcache && go test -p=1 ./...`
+  - Build: `go build -o commala`
+
+rules:
+  proposal:
+    - Detail the rationale and any additions to `.commala.yml` configuration
+    - Maintain backwards compatibility with existing `.commala.yml` files and CLI flags
+  tasks:
+    - Include unit tests using `MockGit` or mock fixtures for validators and Git operations
+    - Ensure all Go tests pass cleanly (`go test -p=1 ./...`)
